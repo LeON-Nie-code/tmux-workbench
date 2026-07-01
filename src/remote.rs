@@ -164,7 +164,7 @@ fn group_panes(server: &str, rows: Vec<(String, Pane)>) -> Vec<Workspace> {
 
 fn scan_git(server: &ServerConfig, path: &str) -> Result<Option<GitInfo>> {
     let command = format!(
-        "cd {} 2>/dev/null && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && printf 'branch=' && git branch --show-current 2>/dev/null && printf 'head=' && git rev-parse --short HEAD 2>/dev/null && printf 'dirty=' && if [ -n \"$(git status --porcelain 2>/dev/null)\" ]; then echo 1; else echo 0; fi && printf 'counts=' && git rev-list --left-right --count '@{{upstream}}...HEAD' 2>/dev/null || printf 'counts=0\t0\n'",
+        "cd {} 2>/dev/null && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && branch=$(git branch --show-current 2>/dev/null || true) && head=$(git rev-parse --short HEAD 2>/dev/null || true) && remote=$(git remote get-url origin 2>/dev/null || true) && if [ -n \"$(git status --porcelain 2>/dev/null)\" ]; then dirty=1; else dirty=0; fi && counts=$(git rev-list --left-right --count '@{{upstream}}...HEAD' 2>/dev/null || printf '0\t0') && printf 'branch=%s\\nhead=%s\\nremote=%s\\ndirty=%s\\ncounts=%s\\n' \"$branch\" \"$head\" \"$remote\" \"$dirty\" \"$counts\"",
         shell_quote(path)
     );
     let output = run_server_command(server, &command)?;
@@ -174,6 +174,7 @@ fn scan_git(server: &ServerConfig, path: &str) -> Result<Option<GitInfo>> {
 
     let mut branch = None;
     let mut head = None;
+    let mut remote = None;
     let mut dirty = false;
     let mut ahead = 0;
     let mut behind = 0;
@@ -190,6 +191,8 @@ fn scan_git(server: &ServerConfig, path: &str) -> Result<Option<GitInfo>> {
             } else {
                 Some(value.to_string())
             };
+        } else if let Some(value) = line.strip_prefix("remote=") {
+            remote = normalize_git_remote(value);
         } else if let Some(value) = line.strip_prefix("dirty=") {
             dirty = value == "1";
         } else if let Some(value) = line.strip_prefix("counts=") {
@@ -202,10 +205,41 @@ fn scan_git(server: &ServerConfig, path: &str) -> Result<Option<GitInfo>> {
     Ok(Some(GitInfo {
         branch,
         head,
+        remote,
         dirty,
         ahead,
         behind,
     }))
+}
+
+fn normalize_git_remote(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return None;
+    }
+
+    if let Some((host, path)) = value
+        .strip_prefix("git@")
+        .and_then(|rest| rest.split_once(':'))
+    {
+        return Some(format!(
+            "https://{}/{}",
+            host,
+            path.trim_end_matches(".git")
+        ));
+    }
+
+    if let Some(rest) = value.strip_prefix("ssh://git@") {
+        if let Some((host, path)) = rest.split_once('/') {
+            return Some(format!(
+                "https://{}/{}",
+                host,
+                path.trim_end_matches(".git")
+            ));
+        }
+    }
+
+    Some(value.trim_end_matches(".git").to_string())
 }
 
 pub fn tmux_attach_command(session: &str, term: Option<&str>) -> String {
@@ -240,7 +274,7 @@ pub fn attach_ssh_command(ssh: &str) -> String {
 mod tests {
     use crate::model::Pane;
 
-    use super::{attach_ssh_command, group_panes, tmux_attach_command};
+    use super::{attach_ssh_command, group_panes, normalize_git_remote, tmux_attach_command};
 
     #[test]
     fn adds_tty_to_plain_ssh_attach_command() {
@@ -294,5 +328,21 @@ mod tests {
 
         assert_eq!(workspaces[0].root_path, "/repo");
         assert_eq!(workspaces[0].agent, "claude");
+    }
+
+    #[test]
+    fn normalizes_common_git_remote_urls() {
+        assert_eq!(
+            normalize_git_remote("git@github.com:user/repo.git").as_deref(),
+            Some("https://github.com/user/repo")
+        );
+        assert_eq!(
+            normalize_git_remote("ssh://git@github.com/user/repo.git").as_deref(),
+            Some("https://github.com/user/repo")
+        );
+        assert_eq!(
+            normalize_git_remote("https://github.com/user/repo.git").as_deref(),
+            Some("https://github.com/user/repo")
+        );
     }
 }

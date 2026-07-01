@@ -54,6 +54,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
           attach_count integer not null default 0,
           git_branch text,
           git_head text,
+          git_remote text,
           git_dirty integer,
           git_ahead integer,
           git_behind integer
@@ -116,6 +117,12 @@ pub fn migrate(conn: &Connection) -> Result<()> {
     add_column_if_missing(
         conn,
         "workspaces",
+        "git_remote",
+        "alter table workspaces add column git_remote text",
+    )?;
+    add_column_if_missing(
+        conn,
+        "workspaces",
         "git_ahead",
         "alter table workspaces add column git_ahead integer",
     )?;
@@ -147,8 +154,8 @@ fn add_column_if_missing(
 
 pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
     conn.execute(
-        "insert into workspaces (id, name, alias, server, session, root_path, agent, note, status, tags, last_seen, last_attached_at, attach_count, git_branch, git_head, git_dirty, git_ahead, git_behind)
-         values (?1, ?2, (select alias from workspaces where id = ?1), ?3, ?4, ?5, ?6, coalesce((select note from workspaces where id = ?1), ''), coalesce((select status from workspaces where id = ?1), 'active'), coalesce((select tags from workspaces where id = ?1), ''), ?7, (select last_attached_at from workspaces where id = ?1), coalesce((select attach_count from workspaces where id = ?1), 0), ?8, ?9, ?10, ?11, ?12)
+        "insert into workspaces (id, name, alias, server, session, root_path, agent, note, status, tags, last_seen, last_attached_at, attach_count, git_branch, git_head, git_remote, git_dirty, git_ahead, git_behind)
+         values (?1, ?2, (select alias from workspaces where id = ?1), ?3, ?4, ?5, ?6, coalesce((select note from workspaces where id = ?1), ''), coalesce((select status from workspaces where id = ?1), 'active'), coalesce((select tags from workspaces where id = ?1), ''), ?7, (select last_attached_at from workspaces where id = ?1), coalesce((select attach_count from workspaces where id = ?1), 0), ?8, ?9, ?10, ?11, ?12, ?13)
          on conflict(id) do update set
            name = excluded.name,
            server = excluded.server,
@@ -164,6 +171,7 @@ pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
            attach_count = workspaces.attach_count,
            git_branch = excluded.git_branch,
            git_head = excluded.git_head,
+           git_remote = excluded.git_remote,
            git_dirty = excluded.git_dirty,
            git_ahead = excluded.git_ahead,
            git_behind = excluded.git_behind",
@@ -177,6 +185,7 @@ pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
             ws.last_seen,
             ws.git.as_ref().and_then(|git| git.branch.as_deref()),
             ws.git.as_ref().and_then(|git| git.head.as_deref()),
+            ws.git.as_ref().and_then(|git| git.remote.as_deref()),
             ws.git.as_ref().map(|git| git.dirty as i64),
             ws.git.as_ref().map(|git| git.ahead),
             ws.git.as_ref().map(|git| git.behind),
@@ -203,7 +212,7 @@ pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
 
 pub fn load_workspaces(conn: &Connection) -> Result<Vec<Workspace>> {
     let mut stmt = conn.prepare(
-        "select id, name, alias, server, session, root_path, agent, note, status, tags, last_seen, last_attached_at, attach_count, git_branch, git_head, git_dirty, git_ahead, git_behind
+        "select id, name, alias, server, session, root_path, agent, note, status, tags, last_seen, last_attached_at, attach_count, git_branch, git_head, git_remote, git_dirty, git_ahead, git_behind
          from workspaces order by coalesce(last_attached_at, last_seen) desc, name",
     )?;
     let rows = stmt.query_map([], |row| {
@@ -227,6 +236,7 @@ pub fn load_workspaces(conn: &Connection) -> Result<Vec<Workspace>> {
                 row.get(15)?,
                 row.get(16)?,
                 row.get(17)?,
+                row.get(18)?,
             ),
             panes: Vec::new(),
         })
@@ -244,17 +254,24 @@ pub fn load_workspaces(conn: &Connection) -> Result<Vec<Workspace>> {
 fn git_info_from_row(
     branch: Option<String>,
     head: Option<String>,
+    remote: Option<String>,
     dirty: Option<i64>,
     ahead: Option<i64>,
     behind: Option<i64>,
 ) -> Option<GitInfo> {
-    if branch.is_none() && head.is_none() && dirty.is_none() && ahead.is_none() && behind.is_none()
+    if branch.is_none()
+        && head.is_none()
+        && remote.is_none()
+        && dirty.is_none()
+        && ahead.is_none()
+        && behind.is_none()
     {
         return None;
     }
     Some(GitInfo {
         branch,
         head,
+        remote,
         dirty: dirty.unwrap_or(0) != 0,
         ahead: ahead.unwrap_or(0),
         behind: behind.unwrap_or(0),

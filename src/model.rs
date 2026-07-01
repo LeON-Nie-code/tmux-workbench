@@ -37,6 +37,7 @@ pub struct Workspace {
 pub struct GitInfo {
     pub branch: Option<String>,
     pub head: Option<String>,
+    pub remote: Option<String>,
     pub dirty: bool,
     pub ahead: i64,
     pub behind: i64,

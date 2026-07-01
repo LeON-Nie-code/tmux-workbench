@@ -89,16 +89,27 @@ fn git_summary(ws: &crate::model::Workspace) -> String {
     };
     let mut parts = Vec::new();
     if let Some(branch) = &git.branch {
-        parts.push(branch.clone());
+        if let Some(head) = &git.head {
+            parts.push(format!("{branch}@{head}"));
+        } else {
+            parts.push(branch.clone());
+        }
+    } else if let Some(head) = &git.head {
+        parts.push(format!("detached@{head}"));
     }
     if git.dirty {
         parts.push("dirty".to_string());
+    } else {
+        parts.push("clean".to_string());
     }
     if git.ahead > 0 {
         parts.push(format!("ahead {}", git.ahead));
     }
     if git.behind > 0 {
         parts.push(format!("behind {}", git.behind));
+    }
+    if let Some(remote) = &git.remote {
+        parts.push(truncate(remote, 72));
     }
     if parts.is_empty() {
         String::new()

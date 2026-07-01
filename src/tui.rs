@@ -316,9 +316,10 @@ fn git_detail(ws: &Workspace) -> String {
     let branch = git.branch.as_deref().unwrap_or("detached");
     let head = git.head.as_deref().unwrap_or("unknown");
     let dirty = if git.dirty { "dirty" } else { "clean" };
+    let remote = git.remote.as_deref().unwrap_or("no remote");
     format!(
-        "{} @ {} ({}, ahead {}, behind {})",
-        branch, head, dirty, git.ahead, git.behind
+        "{branch} @ {head} ({dirty}, ahead {}, behind {}) {remote}",
+        git.ahead, git.behind
     )
 }
 
