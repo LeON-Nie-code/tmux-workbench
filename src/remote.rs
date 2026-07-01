@@ -1,4 +1,8 @@
-use std::process::{Command, Output};
+use std::{
+    process::{Command, Output, Stdio},
+    thread,
+    time::{Duration, Instant},
+};
 
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
@@ -7,6 +11,9 @@ use crate::{
     model::{DoctorReport, GitInfo, Pane, ServerConfig, Workspace},
     util::shell_quote,
 };
+
+const COMMAND_TIMEOUT: Duration = Duration::from_secs(8);
+const COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 pub fn scan_server(server: &ServerConfig) -> Result<Vec<Workspace>> {
     let format = "session=#{session_name}|window=#{window_index}:#{window_name}|pane=#{pane_index}|active=#{pane_active}|cmd=#{pane_current_command}|path=#{pane_current_path}|title=#{pane_title}";
@@ -64,19 +71,45 @@ pub fn remote_doctor(server: &ServerConfig) -> Result<DoctorReport> {
 
 fn run_server_command(server: &ServerConfig, command: &str) -> Result<Output> {
     if server.local {
-        return Command::new("sh")
-            .arg("-lc")
-            .arg(command)
-            .output()
-            .context("failed to run local command");
+        return run_command_with_timeout(Command::new("sh").arg("-lc").arg(command), "local");
     }
 
     let command = format!("{} {}", server.ssh, shell_quote(command));
-    Command::new("sh")
-        .arg("-lc")
-        .arg(command)
-        .output()
-        .context("failed to run remote command")
+    run_command_with_timeout(
+        Command::new("sh").arg("-lc").arg(command),
+        &format!("remote {}", server.name),
+    )
+}
+
+fn run_command_with_timeout(command: &mut Command, label: &str) -> Result<Output> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command
+        .spawn()
+        .with_context(|| format!("failed to run {label} command"))?;
+    let started = Instant::now();
+
+    loop {
+        if child
+            .try_wait()
+            .with_context(|| format!("failed to wait for {label} command"))?
+            .is_some()
+        {
+            return child
+                .wait_with_output()
+                .with_context(|| format!("failed to collect {label} command output"));
+        }
+
+        if started.elapsed() >= COMMAND_TIMEOUT {
+            let _ = child.kill();
+            let _ = child.wait_with_output();
+            bail!(
+                "{label} command timed out after {}s",
+                COMMAND_TIMEOUT.as_secs()
+            );
+        }
+
+        thread::sleep(COMMAND_POLL_INTERVAL);
+    }
 }
 
 fn parse_pane_line(line: &str) -> Result<(String, Pane)> {

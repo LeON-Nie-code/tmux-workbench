@@ -1,4 +1,7 @@
-use std::process::{Command, Stdio};
+use std::{
+    process::{Command, Stdio},
+    thread,
+};
 
 use anyhow::{Context, Result, bail};
 
@@ -16,26 +19,45 @@ use crate::{
 };
 
 pub fn scan() -> Result<()> {
-    let total = scan_index(true)?;
-    println!("Indexed {total} workspaces");
+    let summary = scan_index(true)?;
+    println!("Indexed {} workspaces", summary.total);
     Ok(())
 }
 
-pub fn refresh_index() -> Result<usize> {
+pub fn refresh_index_report() -> Result<ScanSummary> {
     scan_index(false)
 }
 
-fn scan_index(verbose: bool) -> Result<usize> {
+#[derive(Debug, Clone)]
+pub struct ScanSummary {
+    pub total: usize,
+    pub errors: Vec<String>,
+}
+
+fn scan_index(verbose: bool) -> Result<ScanSummary> {
     let config = load_or_create_config()?;
     let conn = open_db()?;
     migrate(&conn)?;
 
-    let mut total = 0;
+    let mut handles = Vec::new();
     for server in config.servers {
         if verbose {
             println!("Scanning {}...", server.name);
         }
-        match scan_server(&server) {
+        let server_name = server.name.clone();
+        handles.push(thread::spawn(move || {
+            let result = scan_server(&server);
+            (server_name, result)
+        }));
+    }
+
+    let mut total = 0;
+    let mut errors = Vec::new();
+    for handle in handles {
+        let (server_name, result) = handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("scan worker panicked"))?;
+        match result {
             Ok(workspaces) => {
                 for workspace in &workspaces {
                     upsert_workspace(&conn, workspace)?;
@@ -43,14 +65,16 @@ fn scan_index(verbose: bool) -> Result<usize> {
                 total += workspaces.len();
             }
             Err(err) => {
+                let message = format!("{server_name}: {err:#}");
                 if verbose {
-                    eprintln!("  failed: {err:#}");
+                    eprintln!("  failed: {message}");
                 }
+                errors.push(message);
             }
         }
     }
 
-    Ok(total)
+    Ok(ScanSummary { total, errors })
 }
 
 pub fn list_workspaces(args: &ListArgs) -> Result<()> {

@@ -22,7 +22,7 @@ use ratatui::{
 use rusqlite::params;
 
 use crate::{
-    commands::{attach, refresh_index, scan},
+    commands::{ScanSummary, attach, refresh_index_report, scan},
     db::{load_workspaces, migrate, open_db},
     model::Workspace,
     util::{edit_note, truncate},
@@ -30,7 +30,13 @@ use crate::{
 
 const AUTO_REFRESH_INTERVAL: Duration = Duration::from_secs(30);
 
-type RefreshResult = std::result::Result<Vec<Workspace>, String>;
+type RefreshResult = std::result::Result<RefreshPayload, String>;
+
+#[derive(Debug)]
+struct RefreshPayload {
+    workspaces: Vec<Workspace>,
+    summary: ScanSummary,
+}
 
 pub fn run_tui() -> Result<()> {
     let workspaces = load_indexed_workspaces()?;
@@ -102,6 +108,7 @@ fn draw_tui(
     let mut show_archived = true;
     let mut last_auto_refresh = Instant::now();
     let mut auto_refresh_in_flight = false;
+    let mut scan_status = String::from("Scan: idle");
     let (refresh_tx, refresh_rx) = mpsc::channel();
 
     loop {
@@ -112,11 +119,13 @@ fn draw_tui(
             &mut state,
             &search,
             show_archived,
+            &mut scan_status,
         );
 
         if last_auto_refresh.elapsed() >= AUTO_REFRESH_INTERVAL && !auto_refresh_in_flight {
             spawn_auto_refresh(refresh_tx.clone());
             auto_refresh_in_flight = true;
+            scan_status = "Scan: refreshing...".to_string();
             last_auto_refresh = Instant::now();
         }
 
@@ -172,6 +181,7 @@ fn draw_tui(
                 vec![Line::from("No matching workspaces")]
             };
             lines.push(Line::from(""));
+            lines.push(Line::from(scan_status.clone()));
             lines.push(Line::from(match mode {
                 InputMode::Normal => controls_line(show_archived),
                 InputMode::Search => "Type to search  Enter accept  Esc clear",
@@ -226,6 +236,7 @@ fn draw_tui(
                                 &search,
                                 show_archived,
                             );
+                            scan_status = "Scan: manual refresh complete".to_string();
                             last_auto_refresh = Instant::now();
                         }
                         KeyCode::Char('j') | KeyCode::Down => {
@@ -286,30 +297,57 @@ fn apply_completed_refresh(
     state: &mut ListState,
     search: &str,
     show_archived: bool,
+    scan_status: &mut String,
 ) {
     while let Ok(result) = refresh_rx.try_recv() {
         *auto_refresh_in_flight = false;
-        if let Ok(next_workspaces) = result {
-            let selected_id = selected_workspace_id(&workspaces, &state, &search, show_archived);
-            *workspaces = next_workspaces;
-            restore_selection(
-                workspaces,
-                state,
-                selected_id.as_deref(),
-                search,
-                show_archived,
-            );
+        match result {
+            Ok(payload) => {
+                let selected_id =
+                    selected_workspace_id(&workspaces, &state, &search, show_archived);
+                *workspaces = payload.workspaces;
+                restore_selection(
+                    workspaces,
+                    state,
+                    selected_id.as_deref(),
+                    search,
+                    show_archived,
+                );
+                *scan_status = scan_status_from_summary(&payload.summary);
+            }
+            Err(err) => {
+                *scan_status = format!("Scan: failed ({err})");
+            }
         }
     }
 }
 
 fn spawn_auto_refresh(refresh_tx: Sender<RefreshResult>) {
     thread::spawn(move || {
-        let result = refresh_index()
-            .and_then(|_| load_indexed_workspaces())
+        let result = refresh_index_report()
+            .and_then(|summary| {
+                let workspaces = load_indexed_workspaces()?;
+                Ok(RefreshPayload {
+                    workspaces,
+                    summary,
+                })
+            })
             .map_err(|err| format!("{err:#}"));
         let _ = refresh_tx.send(result);
     });
+}
+
+fn scan_status_from_summary(summary: &ScanSummary) -> String {
+    if summary.errors.is_empty() {
+        format!("Scan: ok, {} workspaces", summary.total)
+    } else {
+        format!(
+            "Scan: {} workspaces, {} server error(s): {}",
+            summary.total,
+            summary.errors.len(),
+            summary.errors.join("; ")
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
