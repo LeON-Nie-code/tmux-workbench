@@ -156,6 +156,12 @@ pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
            root_path = excluded.root_path,
            agent = excluded.agent,
            last_seen = excluded.last_seen,
+           alias = workspaces.alias,
+           note = workspaces.note,
+           status = workspaces.status,
+           tags = workspaces.tags,
+           last_attached_at = workspaces.last_attached_at,
+           attach_count = workspaces.attach_count,
            git_branch = excluded.git_branch,
            git_head = excluded.git_head,
            git_dirty = excluded.git_dirty,
@@ -353,4 +359,66 @@ fn format_tags(tags: &[String]) -> String {
         .filter(|tag| !tag.is_empty())
         .collect::<Vec<_>>()
         .join(",")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        load_workspaces, migrate, record_attach, set_alias_by_id, set_note_by_id, set_status_by_id,
+        set_tags_by_id, upsert_workspace,
+    };
+    use crate::model::{Pane, Workspace};
+
+    #[test]
+    fn upsert_preserves_user_metadata_and_attach_history() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+
+        let first = test_workspace("/repo");
+        upsert_workspace(&conn, &first).unwrap();
+        set_alias_by_id(&conn, &first.id, Some("alias")).unwrap();
+        set_note_by_id(&conn, &first.id, "note").unwrap();
+        set_status_by_id(&conn, &first.id, "paused").unwrap();
+        set_tags_by_id(&conn, &first.id, &["tag".to_string()]).unwrap();
+        record_attach(&conn, &first.id).unwrap();
+
+        let second = test_workspace("/repo/subdir");
+        upsert_workspace(&conn, &second).unwrap();
+
+        let workspace = load_workspaces(&conn).unwrap().remove(0);
+        assert_eq!(workspace.alias.as_deref(), Some("alias"));
+        assert_eq!(workspace.note, "note");
+        assert_eq!(workspace.status, "paused");
+        assert_eq!(workspace.tags, vec!["tag"]);
+        assert!(workspace.last_attached_at.is_some());
+        assert_eq!(workspace.attach_count, 1);
+        assert_eq!(workspace.root_path, "/repo/subdir");
+    }
+
+    fn test_workspace(root_path: &str) -> Workspace {
+        Workspace {
+            id: "server/session".to_string(),
+            name: "session".to_string(),
+            alias: None,
+            server: "server".to_string(),
+            session: "session".to_string(),
+            root_path: root_path.to_string(),
+            agent: "bash".to_string(),
+            panes: vec![Pane {
+                window: "0:bash".to_string(),
+                pane: 0,
+                active: true,
+                command: "bash".to_string(),
+                path: root_path.to_string(),
+                title: String::new(),
+            }],
+            note: String::new(),
+            status: "active".to_string(),
+            tags: Vec::new(),
+            last_seen: "now".to_string(),
+            last_attached_at: None,
+            attach_count: 0,
+            git: None,
+        }
+    }
 }

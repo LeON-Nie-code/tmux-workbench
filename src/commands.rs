@@ -16,13 +16,25 @@ use crate::{
 };
 
 pub fn scan() -> Result<()> {
+    let total = scan_index(true)?;
+    println!("Indexed {total} workspaces");
+    Ok(())
+}
+
+pub fn refresh_index() -> Result<usize> {
+    scan_index(false)
+}
+
+fn scan_index(verbose: bool) -> Result<usize> {
     let config = load_or_create_config()?;
     let conn = open_db()?;
     migrate(&conn)?;
 
     let mut total = 0;
     for server in config.servers {
-        println!("Scanning {}...", server.name);
+        if verbose {
+            println!("Scanning {}...", server.name);
+        }
         match scan_server(&server) {
             Ok(workspaces) => {
                 for workspace in &workspaces {
@@ -31,13 +43,14 @@ pub fn scan() -> Result<()> {
                 total += workspaces.len();
             }
             Err(err) => {
-                eprintln!("  failed: {err:#}");
+                if verbose {
+                    eprintln!("  failed: {err:#}");
+                }
             }
         }
     }
 
-    println!("Indexed {total} workspaces");
-    Ok(())
+    Ok(total)
 }
 
 pub fn list_workspaces(args: &ListArgs) -> Result<()> {

@@ -133,6 +133,8 @@ q      quit
 
 The left column shows workspace, server, agent, and status. The detail pane
 marks the active tmux pane with `*`.
+The TUI automatically refreshes indexed workspace state every 30 seconds, so
+pane commands and Git state can update without pressing `r`.
 
 ## Files
 
@@ -173,6 +175,7 @@ Implemented:
 - notes and status
 - aliases and tags
 - Git snapshot per workspace
+- rescan preserves notes, aliases, tags, status, and attach history
 - basic TUI with search
 - edit notes from the TUI
 - attach history and recent-first sorting

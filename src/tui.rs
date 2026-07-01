@@ -1,6 +1,6 @@
 use std::{
     io::{self, Stdout},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use anyhow::Result;
@@ -20,16 +20,16 @@ use ratatui::{
 use rusqlite::params;
 
 use crate::{
-    commands::{attach, scan},
+    commands::{attach, refresh_index, scan},
     db::{load_workspaces, migrate, open_db},
     model::Workspace,
     util::{edit_note, truncate},
 };
 
+const AUTO_REFRESH_INTERVAL: Duration = Duration::from_secs(30);
+
 pub fn run_tui() -> Result<()> {
-    let conn = open_db()?;
-    migrate(&conn)?;
-    let workspaces = load_workspaces(&conn)?;
+    let workspaces = load_indexed_workspaces()?;
     if workspaces.is_empty() {
         println!("No workspaces indexed yet. Run `ws init` and `ws scan` first.");
         return Ok(());
@@ -46,6 +46,47 @@ pub fn run_tui() -> Result<()> {
     result
 }
 
+fn load_indexed_workspaces() -> Result<Vec<Workspace>> {
+    let conn = open_db()?;
+    migrate(&conn)?;
+    load_workspaces(&conn)
+}
+
+fn selected_workspace_id(
+    workspaces: &[Workspace],
+    state: &ListState,
+    search: &str,
+    show_archived: bool,
+) -> Option<String> {
+    let selected = state.selected()?;
+    let filtered = filtered_indices(workspaces, search, show_archived);
+    filtered
+        .get(selected)
+        .map(|index| workspaces[*index].id.clone())
+}
+
+fn restore_selection(
+    workspaces: &[Workspace],
+    state: &mut ListState,
+    selected_id: Option<&str>,
+    search: &str,
+    show_archived: bool,
+) {
+    let filtered = filtered_indices(workspaces, search, show_archived);
+    if filtered.is_empty() {
+        state.select(None);
+        return;
+    }
+    let selected = selected_id
+        .and_then(|id| {
+            filtered
+                .iter()
+                .position(|index| workspaces[*index].id == id)
+        })
+        .unwrap_or(0);
+    state.select(Some(selected));
+}
+
 fn draw_tui(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     mut workspaces: Vec<Workspace>,
@@ -55,8 +96,24 @@ fn draw_tui(
     let mut search = String::new();
     let mut mode = InputMode::Normal;
     let mut show_archived = false;
+    let mut last_auto_refresh = Instant::now();
 
     loop {
+        if last_auto_refresh.elapsed() >= AUTO_REFRESH_INTERVAL {
+            let selected_id = selected_workspace_id(&workspaces, &state, &search, show_archived);
+            if refresh_index().is_ok() {
+                workspaces = load_indexed_workspaces()?;
+                restore_selection(
+                    &workspaces,
+                    &mut state,
+                    selected_id.as_deref(),
+                    &search,
+                    show_archived,
+                );
+            }
+            last_auto_refresh = Instant::now();
+        }
+
         let filtered = filtered_indices(&workspaces, &search, show_archived);
         if filtered.is_empty() {
             state.select(None);
@@ -141,8 +198,17 @@ fn draw_tui(
                             state.select(Some(0));
                         }
                         KeyCode::Char('r') => {
+                            let selected_id =
+                                selected_workspace_id(&workspaces, &state, &search, show_archived);
                             workspaces = rescan_from_tui(terminal)?;
-                            state.select(Some(0));
+                            restore_selection(
+                                &workspaces,
+                                &mut state,
+                                selected_id.as_deref(),
+                                &search,
+                                show_archived,
+                            );
+                            last_auto_refresh = Instant::now();
                         }
                         KeyCode::Char('j') | KeyCode::Down => {
                             if !filtered.is_empty() {
