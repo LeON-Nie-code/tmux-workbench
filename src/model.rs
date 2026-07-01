@@ -10,6 +10,8 @@ pub struct ServerConfig {
     pub name: String,
     pub ssh: String,
     pub term: Option<String>,
+    #[serde(default)]
+    pub local: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

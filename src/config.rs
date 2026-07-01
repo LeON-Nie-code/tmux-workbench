@@ -18,19 +18,28 @@ pub fn init_config() -> Result<()> {
     let config = Config {
         servers: vec![
             ServerConfig {
+                name: "local".to_string(),
+                ssh: String::new(),
+                term: Some("xterm-256color".to_string()),
+                local: true,
+            },
+            ServerConfig {
                 name: "cavelight-local-frp".to_string(),
                 ssh: "ssh cavelight-local-frp".to_string(),
                 term: Some("xterm-256color".to_string()),
+                local: false,
             },
             ServerConfig {
                 name: "AI-Teacher-Baidu".to_string(),
                 ssh: "ssh AI-Teacher-Baidu".to_string(),
                 term: Some("xterm-256color".to_string()),
+                local: false,
             },
             ServerConfig {
                 name: "gcloud-emflux".to_string(),
                 ssh: "ssh instance-20260624-045641.asia-southeast1-b.emflux".to_string(),
                 term: Some("xterm-256color".to_string()),
+                local: false,
             },
         ],
     };
@@ -47,7 +56,20 @@ pub fn load_or_create_config() -> Result<Config> {
     }
     let raw =
         fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
-    serde_yaml::from_str(&raw).with_context(|| format!("invalid config {}", path.display()))
+    let mut config: Config =
+        serde_yaml::from_str(&raw).with_context(|| format!("invalid config {}", path.display()))?;
+    if !config.servers.iter().any(|server| server.local) {
+        config.servers.insert(
+            0,
+            ServerConfig {
+                name: "local".to_string(),
+                ssh: String::new(),
+                term: Some("xterm-256color".to_string()),
+                local: true,
+            },
+        );
+    }
+    Ok(config)
 }
 
 pub fn config_path() -> Result<PathBuf> {

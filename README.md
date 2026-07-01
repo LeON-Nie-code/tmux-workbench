@@ -4,12 +4,14 @@
 
 It indexes workspaces across SSH servers and tmux sessions, stores the useful
 context locally, and gives you one command or TUI to jump back into a project.
+It can index both local tmux sessions and tmux sessions on SSH servers.
 
 ## Concept
 
 A workspace is not just a tmux session. It is:
 
 - server
+- local or SSH connection type
 - SSH command
 - tmux session
 - project path
@@ -50,6 +52,9 @@ Scan all configured servers:
 ```bash
 cargo run -- scan
 ```
+
+`scan` includes a built-in `local` server for tmux sessions on the current
+machine. SSH servers come from `~/.config/ws/config.yaml`.
 
 List indexed workspaces:
 

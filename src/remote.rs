@@ -10,13 +10,8 @@ use crate::{
 
 pub fn scan_server(server: &ServerConfig) -> Result<Vec<(String, Pane)>> {
     let format = "session=#{session_name}|window=#{window_index}:#{window_name}|pane=#{pane_index}|active=#{pane_active}|cmd=#{pane_current_command}|path=#{pane_current_path}|title=#{pane_title}";
-    let remote = format!("tmux list-panes -a -F {}", shell_quote(format));
-    let command = format!("{} {}", server.ssh, shell_quote(&remote));
-    let output = Command::new("sh")
-        .arg("-lc")
-        .arg(command)
-        .output()
-        .context("failed to run ssh scan")?;
+    let command = format!("tmux list-panes -a -F {}", shell_quote(format));
+    let output = run_server_command(server, &command).context("failed to run tmux scan")?;
 
     if !output.status.success() {
         bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
@@ -30,14 +25,14 @@ pub fn scan_server(server: &ServerConfig) -> Result<Vec<(String, Pane)>> {
 }
 
 pub fn remote_session_exists(server: &ServerConfig, session: &str) -> Result<bool> {
-    let remote = format!("tmux has-session -t {}", shell_quote(session));
-    let output = run_remote(server, &remote)?;
+    let command = format!("tmux has-session -t {}", shell_quote(session));
+    let output = run_server_command(server, &command)?;
     Ok(output.status.success())
 }
 
 pub fn remote_doctor(server: &ServerConfig) -> Result<DoctorReport> {
-    let remote = "printf 'hostname='; hostname; if command -v tmux >/dev/null 2>&1; then echo 'tmux=ok'; tmux list-sessions -F 'session=#{session_name}' 2>/dev/null || true; else echo 'tmux=missing'; fi";
-    let output = run_remote(server, remote)?;
+    let command = "printf 'hostname='; hostname; if command -v tmux >/dev/null 2>&1; then echo 'tmux=ok'; tmux list-sessions -F 'session=#{session_name}' 2>/dev/null || true; else echo 'tmux=missing'; fi";
+    let output = run_server_command(server, command)?;
     if !output.status.success() {
         bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
     }
@@ -62,8 +57,16 @@ pub fn remote_doctor(server: &ServerConfig) -> Result<DoctorReport> {
     })
 }
 
-fn run_remote(server: &ServerConfig, remote: &str) -> Result<Output> {
-    let command = format!("{} {}", server.ssh, shell_quote(remote));
+fn run_server_command(server: &ServerConfig, command: &str) -> Result<Output> {
+    if server.local {
+        return Command::new("sh")
+            .arg("-lc")
+            .arg(command)
+            .output()
+            .context("failed to run local command");
+    }
+
+    let command = format!("{} {}", server.ssh, shell_quote(command));
     Command::new("sh")
         .arg("-lc")
         .arg(command)

@@ -122,11 +122,7 @@ pub fn attach(name: &str) -> Result<()> {
 
     record_attach(&conn, &ws.id)?;
     let remote = tmux_attach_command(&ws.session, server.term.as_deref());
-    let command = format!(
-        "{} {}",
-        attach_ssh_command(&server.ssh),
-        shell_quote(&remote)
-    );
+    let command = server_command_for_tty(server, &remote);
     Command::new("sh")
         .arg("-lc")
         .arg(command)
@@ -156,11 +152,7 @@ pub fn recreate(name: &str) -> Result<()> {
         shell_quote(server.term.as_deref().unwrap_or("xterm-256color")),
         shell_quote(&ws.session)
     );
-    let command = format!(
-        "{} {}",
-        attach_ssh_command(&server.ssh),
-        shell_quote(&remote)
-    );
+    let command = server_command_for_tty(server, &remote);
     Command::new("sh")
         .arg("-lc")
         .arg(command)
@@ -170,6 +162,18 @@ pub fn recreate(name: &str) -> Result<()> {
         .status()
         .context("failed to recreate workspace")?;
     Ok(())
+}
+
+fn server_command_for_tty(server: &crate::model::ServerConfig, command: &str) -> String {
+    if server.local {
+        command.to_string()
+    } else {
+        format!(
+            "{} {}",
+            attach_ssh_command(&server.ssh),
+            shell_quote(command)
+        )
+    }
 }
 
 pub fn doctor() -> Result<()> {
@@ -182,7 +186,11 @@ pub fn doctor() -> Result<()> {
         println!("server: {}", server.name);
         match remote_doctor(server) {
             Ok(report) => {
-                println!("  ssh: ok");
+                if server.local {
+                    println!("  connection: local");
+                } else {
+                    println!("  ssh: ok");
+                }
                 println!("  host: {}", report.hostname);
                 println!(
                     "  tmux: {}",
