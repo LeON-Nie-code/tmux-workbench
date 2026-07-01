@@ -385,7 +385,7 @@ fn draw_tui(
         terminal.draw(|frame| {
             let chunks = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(42), Constraint::Percentage(58)])
+                .constraints([Constraint::Percentage(52), Constraint::Percentage(48)])
                 .split(frame.area());
 
             let title = match mode {
@@ -399,11 +399,12 @@ fn draw_tui(
                 .map(|ws| {
                     ListItem::new(Line::from(vec![
                         Span::styled(
-                            format!("{:<24}", ws.name),
+                            format!("{:<22}", truncate(&ws.name, 22)),
                             Style::default().add_modifier(Modifier::BOLD),
                         ),
-                        Span::raw(format!(" {} ", ws.agent)),
-                        Span::raw(format!(" {} ", ws.status)),
+                        Span::raw(format!("{:<20}", truncate(&ws.server, 20))),
+                        Span::raw(format!("{:<8}", truncate(&ws.agent, 8))),
+                        Span::raw(format!("{:<8}", truncate(&ws.status, 8))),
                     ]))
                 })
                 .collect();
@@ -523,8 +524,12 @@ fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
         .iter()
         .map(|pane| {
             Line::from(format!(
-                "{} pane={} cmd={} path={}",
-                pane.window, pane.pane, pane.command, pane.path
+                "{:<1} {:<14} {:<4} {:<10} {}",
+                if pane.active { "*" } else { " " },
+                truncate(&pane.window, 14),
+                pane.pane,
+                truncate(&pane.command, 10),
+                pane.path
             ))
         })
         .collect();
@@ -544,6 +549,7 @@ fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
         Line::from(format!("Attach count: {}", ws.attach_count)),
         Line::from(""),
         Line::from("Panes:"),
+        Line::from("A window         pane cmd        path"),
     ];
     lines.extend(pane_lines);
     lines.push(Line::from(""));
@@ -557,6 +563,14 @@ fn workspace_list_title(show_archived: bool) -> String {
     } else {
         "Workspaces".to_string()
     }
+}
+
+fn truncate(value: &str, width: usize) -> String {
+    let mut output = String::new();
+    for ch in value.chars().take(width) {
+        output.push(ch);
+    }
+    output
 }
 
 fn filtered_indices(workspaces: &[Workspace], search: &str, show_archived: bool) -> Vec<usize> {
@@ -832,17 +846,17 @@ fn group_panes(server: &str, rows: Vec<(String, Pane)>) -> Vec<Workspace> {
         .filter_map(|session| {
             let panes = grouped.remove(&session)?;
             let active = panes.iter().find(|pane| pane.active).unwrap_or(&panes[0]);
-            let agent = panes
+            let agent_pane = panes
                 .iter()
                 .find(|pane| pane.command == "codex" || pane.command == "claude")
-                .map(|pane| pane.command.clone())
-                .unwrap_or_else(|| active.command.clone());
+                .unwrap_or(active);
+            let agent = agent_pane.command.clone();
             Some(Workspace {
                 id: format!("{server}/{}", session),
                 name: session.clone(),
                 server: server.to_string(),
                 session,
-                root_path: active.path.clone(),
+                root_path: agent_pane.path.clone(),
                 agent,
                 panes,
                 note: String::new(),
@@ -1175,6 +1189,40 @@ mod tests {
 
         assert_eq!(filtered_indices(&workspaces, "", false), vec![0]);
         assert_eq!(filtered_indices(&workspaces, "", true), vec![0, 1]);
+    }
+
+    #[test]
+    fn workspace_root_prefers_agent_pane_path() {
+        let workspaces = super::group_panes(
+            "server",
+            vec![
+                (
+                    "demo".to_string(),
+                    Pane {
+                        window: "0:main".to_string(),
+                        pane: 0,
+                        active: false,
+                        command: "claude".to_string(),
+                        path: "/repo".to_string(),
+                        title: String::new(),
+                    },
+                ),
+                (
+                    "demo".to_string(),
+                    Pane {
+                        window: "0:main".to_string(),
+                        pane: 1,
+                        active: true,
+                        command: "bash".to_string(),
+                        path: "/repo/frontend".to_string(),
+                        title: String::new(),
+                    },
+                ),
+            ],
+        );
+
+        assert_eq!(workspaces[0].root_path, "/repo");
+        assert_eq!(workspaces[0].agent, "claude");
     }
 
     fn test_workspace(id: &str, status: &str) -> Workspace {

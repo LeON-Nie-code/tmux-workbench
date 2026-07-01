@@ -106,6 +106,9 @@ j/k    move
 q      quit
 ```
 
+The left column shows workspace, server, agent, and status. The detail pane
+marks the active tmux pane with `*`.
+
 ## Files
 
 Config:
