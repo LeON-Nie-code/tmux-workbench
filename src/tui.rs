@@ -14,10 +14,10 @@ use crossterm::{
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout},
-    style::{Modifier, Style},
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
+    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 use rusqlite::params;
 
@@ -142,10 +142,19 @@ fn draw_tui(
         }
 
         terminal.draw(|frame| {
+            let shell = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3),
+                    Constraint::Min(8),
+                    Constraint::Length(1),
+                ])
+                .split(frame.area());
+
             let chunks = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(52), Constraint::Percentage(48)])
-                .split(frame.area());
+                .split(shell[1]);
 
             let title = match mode {
                 InputMode::Normal if search.is_empty() => {
@@ -159,49 +168,53 @@ fn draw_tui(
                 }
                 InputMode::Search => format!("Search  /{search}"),
             };
+
+            let header = app_header(
+                &workspaces,
+                filtered.len(),
+                view,
+                server_filter.as_deref(),
+                &search,
+                &scan_status,
+                mode,
+            );
+            frame.render_widget(header, shell[0]);
+
+            frame.render_widget(panel_block(title.clone()), chunks[0]);
+            let left = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(1), Constraint::Min(1)])
+                .split(inner(chunks[0]));
+            frame.render_widget(list_header(), left[0]);
+
             let items: Vec<ListItem> = filtered
                 .iter()
                 .map(|index| &workspaces[*index])
-                .map(|ws| {
-                    let style = if ws.status == "archived" {
-                        Style::default().add_modifier(Modifier::DIM)
-                    } else {
-                        Style::default()
-                    };
-                    ListItem::new(Line::from(vec![
-                        Span::styled(
-                            format!("{:<22}", truncate(display_name(ws), 22)),
-                            Style::default().add_modifier(Modifier::BOLD),
-                        ),
-                        Span::raw(format!("{:<20}", truncate(&ws.server, 20))),
-                        Span::raw(format!("{:<8}", truncate(&ws.agent, 8))),
-                        Span::raw(format!("{:<12}", truncate(&workspace_state(ws), 12))),
-                    ]))
-                    .style(style)
-                })
+                .map(workspace_list_item)
                 .collect();
             let list = List::new(items)
-                .block(Block::default().title(title).borders(Borders::ALL))
-                .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
-            frame.render_stateful_widget(list, chunks[0], &mut state);
+                .highlight_style(
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )
+                .highlight_symbol("> ");
+            frame.render_stateful_widget(list, left[1], &mut state);
 
-            let mut lines = if let Some(selected) = state.selected() {
+            let lines = if let Some(selected) = state.selected() {
                 let ws = &workspaces[filtered[selected]];
                 workspace_detail_lines(ws)
             } else {
                 vec![Line::from("No matching workspaces")]
             };
-            lines.push(Line::from(""));
-            lines.push(Line::from(scan_status.clone()));
-            lines.push(Line::from(match mode {
-                InputMode::Normal => controls_line(view),
-                InputMode::Search => "Type to search  Enter accept  Esc clear",
-            }));
 
             let detail = Paragraph::new(lines)
-                .block(Block::default().title("Detail").borders(Borders::ALL))
+                .block(panel_block("Workspace"))
                 .wrap(Wrap { trim: false });
             frame.render_widget(detail, chunks[1]);
+
+            frame.render_widget(footer(mode, view), shell[2]);
         })?;
 
         if event::poll(Duration::from_millis(200))? {
@@ -354,6 +367,194 @@ fn draw_tui(
     Ok(())
 }
 
+fn app_header(
+    workspaces: &[Workspace],
+    filtered_count: usize,
+    view: WorkspaceView,
+    server_filter: Option<&str>,
+    search: &str,
+    scan_status: &str,
+    mode: InputMode,
+) -> Paragraph<'static> {
+    let total = workspaces.len();
+    let active = workspaces
+        .iter()
+        .filter(|workspace| workspace.status != "archived")
+        .count();
+    let missing = workspaces
+        .iter()
+        .filter(|workspace| workspace.presence != "seen")
+        .count();
+    let search_label = if search.is_empty() {
+        "none".to_string()
+    } else {
+        search.to_string()
+    };
+    let mode_label = match mode {
+        InputMode::Normal => "normal",
+        InputMode::Search => "search",
+    };
+
+    Paragraph::new(vec![
+        Line::from(vec![
+            Span::styled(
+                " ws ",
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                "Workspace Memory",
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                format!("{} shown / {} total", filtered_count, total),
+                Style::default().fg(Color::Gray),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                format!("{} active", active),
+                Style::default().fg(Color::Green),
+            ),
+            Span::raw("  "),
+            Span::styled(format!("{} missing", missing), presence_style("missing")),
+        ]),
+        Line::from(vec![
+            label_span("view"),
+            value_span(view.label()),
+            label_span("server"),
+            value_span(server_filter.unwrap_or("all")),
+            label_span("mode"),
+            value_span(mode_label),
+            label_span("search"),
+            value_span(&search_label),
+            label_span("scan"),
+            Span::styled(scan_status.to_string(), scan_style(scan_status)),
+        ]),
+    ])
+    .block(Block::default().style(Style::default().bg(Color::Black)))
+}
+
+fn footer(mode: InputMode, view: WorkspaceView) -> Paragraph<'static> {
+    let text = match mode {
+        InputMode::Normal => controls_line(view),
+        InputMode::Search => "Type to search | Enter accept | Esc clear",
+    };
+    Paragraph::new(Line::from(vec![
+        Span::styled(
+            " keys ",
+            Style::default().fg(Color::Black).bg(Color::DarkGray),
+        ),
+        Span::raw(" "),
+        Span::styled(text, Style::default().fg(Color::Gray)),
+    ]))
+}
+
+fn panel_block(title: impl Into<String>) -> Block<'static> {
+    Block::default()
+        .title(Span::styled(
+            format!(" {} ", title.into()),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::DarkGray))
+}
+
+fn inner(area: Rect) -> Rect {
+    Rect {
+        x: area.x.saturating_add(1),
+        y: area.y.saturating_add(1),
+        width: area.width.saturating_sub(2),
+        height: area.height.saturating_sub(2),
+    }
+}
+
+fn list_header() -> Paragraph<'static> {
+    Paragraph::new(Line::from(vec![
+        Span::styled(format!("{:<24}", "WORKSPACE"), header_style()),
+        Span::styled(format!("{:<20}", "SERVER"), header_style()),
+        Span::styled(format!("{:<8}", "AGENT"), header_style()),
+        Span::styled("STATE", header_style()),
+    ]))
+}
+
+fn workspace_list_item(ws: &Workspace) -> ListItem<'static> {
+    let base_style = if ws.status == "archived" {
+        Style::default().fg(Color::DarkGray)
+    } else {
+        Style::default().fg(Color::White)
+    };
+    ListItem::new(Line::from(vec![
+        Span::styled(
+            format!("{:<24}", truncate(display_name(ws), 22)),
+            base_style.add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            format!("{:<20}", truncate(&ws.server, 20)),
+            Style::default().fg(Color::Gray),
+        ),
+        Span::styled(
+            format!("{:<8}", truncate(&ws.agent, 8)),
+            Style::default().fg(Color::Yellow),
+        ),
+        Span::styled(
+            format!("{:<12}", truncate(&workspace_state(ws), 12)),
+            status_style(ws),
+        ),
+    ]))
+}
+
+fn label_span(label: &str) -> Span<'static> {
+    Span::styled(format!(" {} ", label), Style::default().fg(Color::DarkGray))
+}
+
+fn value_span(value: &str) -> Span<'static> {
+    Span::styled(format!("{}  ", value), Style::default().fg(Color::White))
+}
+
+fn header_style() -> Style {
+    Style::default()
+        .fg(Color::DarkGray)
+        .add_modifier(Modifier::BOLD)
+}
+
+fn status_style(ws: &Workspace) -> Style {
+    if ws.presence != "seen" {
+        return presence_style(&ws.presence);
+    }
+    match ws.status.as_str() {
+        "archived" => Style::default().fg(Color::DarkGray),
+        "active" => Style::default().fg(Color::Green),
+        _ => Style::default().fg(Color::Yellow),
+    }
+}
+
+fn presence_style(presence: &str) -> Style {
+    match presence {
+        "seen" => Style::default().fg(Color::Green),
+        "missing" => Style::default().fg(Color::Red),
+        _ => Style::default().fg(Color::Yellow),
+    }
+}
+
+fn scan_style(scan_status: &str) -> Style {
+    if scan_status.contains("failed") || scan_status.contains("error") {
+        Style::default().fg(Color::Red)
+    } else if scan_status.contains("refreshing") {
+        Style::default().fg(Color::Yellow)
+    } else {
+        Style::default().fg(Color::Green)
+    }
+}
+
 fn apply_completed_refresh(
     refresh_rx: &Receiver<RefreshResult>,
     auto_refresh_in_flight: &mut bool,
@@ -458,53 +659,107 @@ fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
         .panes
         .iter()
         .map(|pane| {
-            Line::from(format!(
-                "{:<1} {:<14} {:<4} {:<10} {}",
-                if pane.active { "*" } else { " " },
-                truncate(&pane.window, 14),
-                pane.pane,
-                truncate(&pane.command, 10),
-                pane.path
-            ))
+            let marker = if pane.active { "*" } else { " " };
+            Line::from(vec![
+                Span::styled(format!("{:<1} ", marker), Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    format!("{:<14}", truncate(&pane.window, 14)),
+                    Style::default().fg(Color::White),
+                ),
+                Span::raw(" "),
+                Span::styled(
+                    format!("{:<4}", pane.pane),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::styled(
+                    format!("{:<10}", truncate(&pane.command, 10)),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::styled(pane.path.clone(), Style::default().fg(Color::Gray)),
+            ])
         })
         .collect();
     let mut lines = vec![
-        Line::from(format!("Name: {}", ws.name)),
-        Line::from(format!("Alias: {}", ws.alias.as_deref().unwrap_or(""))),
-        Line::from(format!("ID: {}", ws.id)),
-        Line::from(format!("Server: {}", ws.server)),
-        Line::from(format!("Session: {}", ws.session)),
-        Line::from(format!("Path: {}", ws.root_path)),
-        Line::from(format!("Agent: {}", ws.agent)),
-        Line::from(format!("Panes: {}", ws.panes.len())),
-        Line::from(format!("Active: {}", active_command)),
-        Line::from(format!("Status: {}", ws.status)),
-        Line::from(format!("Presence: {}", ws.presence)),
-        Line::from(format!("Tags: {}", ws.tags.join(", "))),
-        Line::from(format!("Git: {}", git_detail(ws))),
-        Line::from(format!("Last seen: {}", ws.last_seen)),
-        Line::from(format!(
-            "Last attached: {}",
-            ws.last_attached_at.as_deref().unwrap_or("never")
-        )),
-        Line::from(format!("Attach count: {}", ws.attach_count)),
+        section_line("Overview"),
+        field_line("Name", display_name(ws)),
+        field_line("ID", &ws.id),
+        field_line("Server", &ws.server),
+        field_line("Session", &ws.session),
+        field_line("Path", &ws.root_path),
+        field_line("Tags", &tags_detail(ws)),
         Line::from(""),
-        Line::from("Pane detail:"),
-        Line::from("A window         pane cmd        path"),
+        section_line("Runtime"),
+        field_line("Agent", &ws.agent),
+        field_line("Panes", &ws.panes.len().to_string()),
+        field_line("Active", &active_command),
+        field_line("Status", &workspace_state(ws)),
+        Line::from(""),
+        section_line("Git"),
+        field_line("State", &git_detail(ws)),
+        Line::from(""),
+        section_line("Activity"),
+        field_line("Last seen", &ws.last_seen),
+        field_line(
+            "Last attached",
+            ws.last_attached_at.as_deref().unwrap_or("never"),
+        ),
+        field_line("Attach count", &ws.attach_count.to_string()),
+        Line::from(""),
+        section_line("Panes"),
+        Line::from(vec![
+            Span::styled("A ", header_style()),
+            Span::styled(format!("{:<14} ", "WINDOW"), header_style()),
+            Span::styled(format!("{:<4}", "PANE"), header_style()),
+            Span::styled(format!("{:<10}", "CMD"), header_style()),
+            Span::styled("PATH", header_style()),
+        ]),
     ];
     lines.extend(pane_lines);
     lines.push(Line::from(""));
+    lines.push(section_line("Note"));
     lines.extend(note_lines(&ws.note));
     lines
 }
 
+fn section_line(title: &str) -> Line<'static> {
+    Line::from(Span::styled(
+        title.to_string(),
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    ))
+}
+
+fn field_line(label: &str, value: &str) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(
+            format!("{:<13}", label),
+            Style::default().fg(Color::DarkGray),
+        ),
+        Span::styled(value.to_string(), Style::default().fg(Color::White)),
+    ])
+}
+
+fn tags_detail(ws: &Workspace) -> String {
+    if ws.tags.is_empty() {
+        "-".to_string()
+    } else {
+        ws.tags.join(", ")
+    }
+}
+
 fn note_lines(note: &str) -> Vec<Line<'static>> {
     if note.is_empty() {
-        return vec![Line::from("Note:")];
+        return vec![field_line("", "-")];
     }
 
-    let mut lines = vec![Line::from("Note:")];
-    lines.extend(note.lines().map(|line| Line::from(format!("  {line}"))));
+    let mut lines = Vec::new();
+    lines.extend(note.lines().map(|line| {
+        Line::from(Span::styled(
+            format!("  {line}"),
+            Style::default().fg(Color::White),
+        ))
+    }));
     if note.ends_with('\n') {
         lines.push(Line::from("  "));
     }
@@ -824,11 +1079,10 @@ mod tests {
     #[test]
     fn note_lines_preserve_newlines() {
         let lines = note_lines("first\n\nsecond");
-        assert_eq!(lines.len(), 4);
-        assert_eq!(lines[0].to_string(), "Note:");
-        assert_eq!(lines[1].to_string(), "  first");
-        assert_eq!(lines[2].to_string(), "  ");
-        assert_eq!(lines[3].to_string(), "  second");
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[0].to_string(), "  first");
+        assert_eq!(lines[1].to_string(), "  ");
+        assert_eq!(lines[2].to_string(), "  second");
     }
 
     fn test_workspace(id: &str, status: &str) -> Workspace {
