@@ -10,8 +10,7 @@ use crate::{
         set_note_by_id, set_status_by_id, set_tags_by_id, upsert_workspace,
     },
     remote::{
-        attach_ssh_command, group_panes, remote_doctor, remote_session_exists, scan_server,
-        tmux_attach_command,
+        attach_ssh_command, remote_doctor, remote_session_exists, scan_server, tmux_attach_command,
     },
     util::{edit_file, shell_quote, truncate},
 };
@@ -25,8 +24,7 @@ pub fn scan() -> Result<()> {
     for server in config.servers {
         println!("Scanning {}...", server.name);
         match scan_server(&server) {
-            Ok(panes) => {
-                let workspaces = group_panes(&server.name, panes);
+            Ok(workspaces) => {
                 for workspace in &workspaces {
                     upsert_workspace(&conn, workspace)?;
                 }
@@ -59,16 +57,41 @@ pub fn list_workspaces(args: &ListArgs) -> Result<()> {
             format!(" [{}]", ws.tags.join(","))
         };
         println!(
-            "{:<44} {:<22} {:<8} {:<8} {}{}",
+            "{:<44} {:<22} {:<8} {:<8} {}{}{}",
             ws.id,
             truncate(name, 22),
             ws.agent,
             ws.status,
             ws.root_path,
+            git_summary(&ws),
             tags
         );
     }
     Ok(())
+}
+
+fn git_summary(ws: &crate::model::Workspace) -> String {
+    let Some(git) = &ws.git else {
+        return String::new();
+    };
+    let mut parts = Vec::new();
+    if let Some(branch) = &git.branch {
+        parts.push(branch.clone());
+    }
+    if git.dirty {
+        parts.push("dirty".to_string());
+    }
+    if git.ahead > 0 {
+        parts.push(format!("ahead {}", git.ahead));
+    }
+    if git.behind > 0 {
+        parts.push(format!("behind {}", git.behind));
+    }
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!(" {{{}}}", parts.join(", "))
+    }
 }
 
 fn filtered_workspaces(

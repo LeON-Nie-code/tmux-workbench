@@ -30,6 +30,16 @@ pub struct Workspace {
     pub last_seen: String,
     pub last_attached_at: Option<String>,
     pub attach_count: i64,
+    pub git: Option<GitInfo>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GitInfo {
+    pub branch: Option<String>,
+    pub head: Option<String>,
+    pub dirty: bool,
+    pub ahead: i64,
+    pub behind: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]

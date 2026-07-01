@@ -17,6 +17,7 @@ A workspace is not just a tmux session. It is:
 - project path
 - running agent or shell
 - pane snapshot
+- git branch, head, dirty state, ahead/behind
 - status
 - notes
 
@@ -61,6 +62,9 @@ List indexed workspaces:
 ```bash
 cargo run -- list
 ```
+
+When the workspace path is inside a Git repository, `list`, TUI detail, and
+JSON output include branch, HEAD, dirty state, and upstream ahead/behind counts.
 
 Filter or export indexed workspaces:
 
@@ -168,6 +172,7 @@ Implemented:
 - attach by workspace ID
 - notes and status
 - aliases and tags
+- Git snapshot per workspace
 - basic TUI with search
 - edit notes from the TUI
 - attach history and recent-first sorting

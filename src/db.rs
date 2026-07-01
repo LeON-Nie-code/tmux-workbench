@@ -4,7 +4,7 @@ use rusqlite::{Connection, params};
 
 use crate::{
     config::data_path,
-    model::{Pane, Workspace},
+    model::{GitInfo, Pane, Workspace},
     util::shell_quote,
 };
 
@@ -51,7 +51,12 @@ pub fn migrate(conn: &Connection) -> Result<()> {
           tags text not null default '',
           last_seen text not null,
           last_attached_at text,
-          attach_count integer not null default 0
+          attach_count integer not null default 0,
+          git_branch text,
+          git_head text,
+          git_dirty integer,
+          git_ahead integer,
+          git_behind integer
         );
 
         create table if not exists panes (
@@ -90,6 +95,36 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         "tags",
         "alter table workspaces add column tags text not null default ''",
     )?;
+    add_column_if_missing(
+        conn,
+        "workspaces",
+        "git_branch",
+        "alter table workspaces add column git_branch text",
+    )?;
+    add_column_if_missing(
+        conn,
+        "workspaces",
+        "git_head",
+        "alter table workspaces add column git_head text",
+    )?;
+    add_column_if_missing(
+        conn,
+        "workspaces",
+        "git_dirty",
+        "alter table workspaces add column git_dirty integer",
+    )?;
+    add_column_if_missing(
+        conn,
+        "workspaces",
+        "git_ahead",
+        "alter table workspaces add column git_ahead integer",
+    )?;
+    add_column_if_missing(
+        conn,
+        "workspaces",
+        "git_behind",
+        "alter table workspaces add column git_behind integer",
+    )?;
     Ok(())
 }
 
@@ -112,15 +147,20 @@ fn add_column_if_missing(
 
 pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
     conn.execute(
-        "insert into workspaces (id, name, alias, server, session, root_path, agent, note, status, tags, last_seen, last_attached_at, attach_count)
-         values (?1, ?2, (select alias from workspaces where id = ?1), ?3, ?4, ?5, ?6, coalesce((select note from workspaces where id = ?1), ''), coalesce((select status from workspaces where id = ?1), 'active'), coalesce((select tags from workspaces where id = ?1), ''), ?7, (select last_attached_at from workspaces where id = ?1), coalesce((select attach_count from workspaces where id = ?1), 0))
+        "insert into workspaces (id, name, alias, server, session, root_path, agent, note, status, tags, last_seen, last_attached_at, attach_count, git_branch, git_head, git_dirty, git_ahead, git_behind)
+         values (?1, ?2, (select alias from workspaces where id = ?1), ?3, ?4, ?5, ?6, coalesce((select note from workspaces where id = ?1), ''), coalesce((select status from workspaces where id = ?1), 'active'), coalesce((select tags from workspaces where id = ?1), ''), ?7, (select last_attached_at from workspaces where id = ?1), coalesce((select attach_count from workspaces where id = ?1), 0), ?8, ?9, ?10, ?11, ?12)
          on conflict(id) do update set
            name = excluded.name,
            server = excluded.server,
            session = excluded.session,
            root_path = excluded.root_path,
            agent = excluded.agent,
-           last_seen = excluded.last_seen",
+           last_seen = excluded.last_seen,
+           git_branch = excluded.git_branch,
+           git_head = excluded.git_head,
+           git_dirty = excluded.git_dirty,
+           git_ahead = excluded.git_ahead,
+           git_behind = excluded.git_behind",
         params![
             ws.id,
             ws.name,
@@ -128,7 +168,12 @@ pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
             ws.session,
             ws.root_path,
             ws.agent,
-            ws.last_seen
+            ws.last_seen,
+            ws.git.as_ref().and_then(|git| git.branch.as_deref()),
+            ws.git.as_ref().and_then(|git| git.head.as_deref()),
+            ws.git.as_ref().map(|git| git.dirty as i64),
+            ws.git.as_ref().map(|git| git.ahead),
+            ws.git.as_ref().map(|git| git.behind),
         ],
     )?;
     conn.execute("delete from panes where workspace_id = ?1", params![ws.id])?;
@@ -152,7 +197,7 @@ pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
 
 pub fn load_workspaces(conn: &Connection) -> Result<Vec<Workspace>> {
     let mut stmt = conn.prepare(
-        "select id, name, alias, server, session, root_path, agent, note, status, tags, last_seen, last_attached_at, attach_count
+        "select id, name, alias, server, session, root_path, agent, note, status, tags, last_seen, last_attached_at, attach_count, git_branch, git_head, git_dirty, git_ahead, git_behind
          from workspaces order by coalesce(last_attached_at, last_seen) desc, name",
     )?;
     let rows = stmt.query_map([], |row| {
@@ -170,6 +215,13 @@ pub fn load_workspaces(conn: &Connection) -> Result<Vec<Workspace>> {
             last_seen: row.get(10)?,
             last_attached_at: row.get(11)?,
             attach_count: row.get(12)?,
+            git: git_info_from_row(
+                row.get(13)?,
+                row.get(14)?,
+                row.get(15)?,
+                row.get(16)?,
+                row.get(17)?,
+            ),
             panes: Vec::new(),
         })
     })?;
@@ -181,6 +233,26 @@ pub fn load_workspaces(conn: &Connection) -> Result<Vec<Workspace>> {
         workspaces.push(ws);
     }
     Ok(workspaces)
+}
+
+fn git_info_from_row(
+    branch: Option<String>,
+    head: Option<String>,
+    dirty: Option<i64>,
+    ahead: Option<i64>,
+    behind: Option<i64>,
+) -> Option<GitInfo> {
+    if branch.is_none() && head.is_none() && dirty.is_none() && ahead.is_none() && behind.is_none()
+    {
+        return None;
+    }
+    Some(GitInfo {
+        branch,
+        head,
+        dirty: dirty.unwrap_or(0) != 0,
+        ahead: ahead.unwrap_or(0),
+        behind: behind.unwrap_or(0),
+    })
 }
 
 pub fn find_workspace(conn: &Connection, name: &str) -> Result<Option<Workspace>> {

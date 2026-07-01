@@ -4,11 +4,11 @@ use anyhow::{Context, Result, bail};
 use chrono::Utc;
 
 use crate::{
-    model::{DoctorReport, Pane, ServerConfig, Workspace},
+    model::{DoctorReport, GitInfo, Pane, ServerConfig, Workspace},
     util::shell_quote,
 };
 
-pub fn scan_server(server: &ServerConfig) -> Result<Vec<(String, Pane)>> {
+pub fn scan_server(server: &ServerConfig) -> Result<Vec<Workspace>> {
     let format = "session=#{session_name}|window=#{window_index}:#{window_name}|pane=#{pane_index}|active=#{pane_active}|cmd=#{pane_current_command}|path=#{pane_current_path}|title=#{pane_title}";
     let command = format!("tmux list-panes -a -F {}", shell_quote(format));
     let output = run_server_command(server, &command).context("failed to run tmux scan")?;
@@ -17,11 +17,16 @@ pub fn scan_server(server: &ServerConfig) -> Result<Vec<(String, Pane)>> {
         bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
     }
 
-    String::from_utf8_lossy(&output.stdout)
+    let panes: Vec<(String, Pane)> = String::from_utf8_lossy(&output.stdout)
         .lines()
         .filter(|line| !line.trim().is_empty())
         .map(parse_pane_line)
-        .collect()
+        .collect::<Result<_>>()?;
+    let mut workspaces = group_panes(&server.name, panes);
+    for workspace in &mut workspaces {
+        workspace.git = scan_git(server, &workspace.root_path).ok().flatten();
+    }
+    Ok(workspaces)
 }
 
 pub fn remote_session_exists(server: &ServerConfig, session: &str) -> Result<bool> {
@@ -116,7 +121,7 @@ fn parse_pane_line(line: &str) -> Result<(String, Pane)> {
     ))
 }
 
-pub fn group_panes(server: &str, rows: Vec<(String, Pane)>) -> Vec<Workspace> {
+fn group_panes(server: &str, rows: Vec<(String, Pane)>) -> Vec<Workspace> {
     let mut names = Vec::<String>::new();
     let mut grouped = std::collections::BTreeMap::<String, Vec<Pane>>::new();
     for (session, pane) in rows {
@@ -151,9 +156,56 @@ pub fn group_panes(server: &str, rows: Vec<(String, Pane)>) -> Vec<Workspace> {
                 last_seen: Utc::now().to_rfc3339(),
                 last_attached_at: None,
                 attach_count: 0,
+                git: None,
             })
         })
         .collect()
+}
+
+fn scan_git(server: &ServerConfig, path: &str) -> Result<Option<GitInfo>> {
+    let command = format!(
+        "cd {} 2>/dev/null && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && printf 'branch=' && git branch --show-current 2>/dev/null && printf 'head=' && git rev-parse --short HEAD 2>/dev/null && printf 'dirty=' && if [ -n \"$(git status --porcelain 2>/dev/null)\" ]; then echo 1; else echo 0; fi && printf 'counts=' && git rev-list --left-right --count '@{{upstream}}...HEAD' 2>/dev/null || printf 'counts=0\t0\n'",
+        shell_quote(path)
+    );
+    let output = run_server_command(server, &command)?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    let mut branch = None;
+    let mut head = None;
+    let mut dirty = false;
+    let mut ahead = 0;
+    let mut behind = 0;
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        if let Some(value) = line.strip_prefix("branch=") {
+            branch = if value.is_empty() {
+                None
+            } else {
+                Some(value.to_string())
+            };
+        } else if let Some(value) = line.strip_prefix("head=") {
+            head = if value.is_empty() {
+                None
+            } else {
+                Some(value.to_string())
+            };
+        } else if let Some(value) = line.strip_prefix("dirty=") {
+            dirty = value == "1";
+        } else if let Some(value) = line.strip_prefix("counts=") {
+            let mut parts = value.split_whitespace();
+            behind = parts.next().and_then(|part| part.parse().ok()).unwrap_or(0);
+            ahead = parts.next().and_then(|part| part.parse().ok()).unwrap_or(0);
+        }
+    }
+
+    Ok(Some(GitInfo {
+        branch,
+        head,
+        dirty,
+        ahead,
+        behind,
+    }))
 }
 
 pub fn tmux_attach_command(session: &str, term: Option<&str>) -> String {

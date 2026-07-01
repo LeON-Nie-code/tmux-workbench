@@ -226,6 +226,7 @@ fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
         Line::from(format!("Agent: {}", ws.agent)),
         Line::from(format!("Status: {}", ws.status)),
         Line::from(format!("Tags: {}", ws.tags.join(", "))),
+        Line::from(format!("Git: {}", git_detail(ws))),
         Line::from(format!("Last seen: {}", ws.last_seen)),
         Line::from(format!(
             "Last attached: {}",
@@ -240,6 +241,19 @@ fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
     lines.push(Line::from(""));
     lines.push(Line::from(format!("Note: {}", ws.note)));
     lines
+}
+
+fn git_detail(ws: &Workspace) -> String {
+    let Some(git) = &ws.git else {
+        return "not a git repo".to_string();
+    };
+    let branch = git.branch.as_deref().unwrap_or("detached");
+    let head = git.head.as_deref().unwrap_or("unknown");
+    let dirty = if git.dirty { "dirty" } else { "clean" };
+    format!(
+        "{} @ {} ({}, ahead {}, behind {})",
+        branch, head, dirty, git.ahead, git.behind
+    )
 }
 
 fn workspace_list_title(show_archived: bool) -> String {
@@ -382,6 +396,7 @@ mod tests {
             last_seen: "now".to_string(),
             last_attached_at: None,
             attach_count: 0,
+            git: None,
         };
 
         assert!(workspace_matches(&workspace, "frontend"));
@@ -417,6 +432,7 @@ mod tests {
             last_seen: "now".to_string(),
             last_attached_at: None,
             attach_count: 0,
+            git: None,
         }
     }
 }
