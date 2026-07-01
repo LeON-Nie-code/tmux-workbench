@@ -99,7 +99,7 @@ fn draw_tui(
     state.select(Some(0));
     let mut search = String::new();
     let mut mode = InputMode::Normal;
-    let mut show_archived = false;
+    let mut show_archived = true;
     let mut last_auto_refresh = Instant::now();
     let mut auto_refresh_in_flight = false;
     let (refresh_tx, refresh_rx) = mpsc::channel();
@@ -143,6 +143,11 @@ fn draw_tui(
                 .iter()
                 .map(|index| &workspaces[*index])
                 .map(|ws| {
+                    let style = if ws.status == "archived" {
+                        Style::default().add_modifier(Modifier::DIM)
+                    } else {
+                        Style::default()
+                    };
                     ListItem::new(Line::from(vec![
                         Span::styled(
                             format!("{:<22}", truncate(display_name(ws), 22)),
@@ -152,6 +157,7 @@ fn draw_tui(
                         Span::raw(format!("{:<8}", truncate(&ws.agent, 8))),
                         Span::raw(format!("{:<8}", truncate(&ws.status, 8))),
                     ]))
+                    .style(style)
                 })
                 .collect();
             let list = List::new(items)
@@ -167,9 +173,7 @@ fn draw_tui(
             };
             lines.push(Line::from(""));
             lines.push(Line::from(match mode {
-                InputMode::Normal => {
-                    "Enter attach  / search  n note  a archive  z show archived  r rescan  q quit"
-                }
+                InputMode::Normal => controls_line(show_archived),
                 InputMode::Search => "Type to search  Enter accept  Esc clear",
             }));
 
@@ -197,12 +201,19 @@ fn draw_tui(
                             if let Some(selected) = state.selected() {
                                 let index = filtered[selected];
                                 toggle_archive(&mut workspaces[index])?;
-                                state.select(Some(0));
                             }
                         }
                         KeyCode::Char('z') => {
+                            let selected_id =
+                                selected_workspace_id(&workspaces, &state, &search, show_archived);
                             show_archived = !show_archived;
-                            state.select(Some(0));
+                            restore_selection(
+                                &workspaces,
+                                &mut state,
+                                selected_id.as_deref(),
+                                &search,
+                                show_archived,
+                            );
                         }
                         KeyCode::Char('r') => {
                             let selected_id =
@@ -380,7 +391,15 @@ fn workspace_list_title(show_archived: bool) -> String {
     if show_archived {
         "Workspaces (all)".to_string()
     } else {
-        "Workspaces".to_string()
+        "Workspaces (active)".to_string()
+    }
+}
+
+fn controls_line(show_archived: bool) -> &'static str {
+    if show_archived {
+        "Enter attach  / search  n note  a archive  z hide archived  r rescan  q quit"
+    } else {
+        "Enter attach  / search  n note  a archive  z show archived  r rescan  q quit"
     }
 }
 
