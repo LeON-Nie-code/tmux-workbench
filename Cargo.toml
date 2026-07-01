@@ -2,6 +2,8 @@
 name = "ws"
 version = "0.1.0"
 edition = "2024"
+description = "Tmux Workbench: a terminal workspace memory manager for local and remote tmux sessions"
+license = "MIT"
 
 [dependencies]
 anyhow = "1.0.100"

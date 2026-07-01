@@ -406,7 +406,7 @@ fn app_header(
             ),
             Span::raw("  "),
             Span::styled(
-                "Workspace Memory",
+                "Tmux Workbench",
                 Style::default()
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),

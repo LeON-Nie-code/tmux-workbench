@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a problem with ws
+about: Report a problem with Tmux Workbench
 title: ""
 labels: bug
 assignees: ""
@@ -16,7 +16,7 @@ assignees: ""
 - Terminal:
 - Shell:
 - tmux version:
-- ws version or commit:
+- Tmux Workbench version or commit:
 
 ## Reproduction steps
 

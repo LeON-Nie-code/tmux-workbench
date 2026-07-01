@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for considering a contribution.
+Thanks for considering a contribution to Tmux Workbench.
 
 ## Development
 

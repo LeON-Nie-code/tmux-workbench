@@ -1,15 +1,21 @@
-# ws
+# Tmux Workbench
 
-`ws` is a terminal workspace memory manager for local and remote tmux sessions.
+**Tmux Workbench** is a terminal workspace memory manager for local and remote
+tmux sessions.
 
 It indexes tmux sessions across your machine and SSH servers, stores the useful
 context locally, and gives you a fast CLI/TUI entry point to jump back into a
-project.
+project. The command is intentionally short:
+
+```bash
+ws
+```
 
 ## Why
 
 SSH plus tmux is resilient, but it does not remember enough project context when
-you have many projects across many servers. `ws` adds a local memory layer:
+you have many projects across many servers. Tmux Workbench adds a local memory
+layer:
 
 - which server a workspace lives on
 - which tmux session to attach to
@@ -145,8 +151,9 @@ Local index:
 
 ## Design
 
-`ws` does not replace tmux. It reads tmux state, stores a local index, and uses
-tmux/ssh for attach and discovery.
+Tmux Workbench does not replace tmux. It reads tmux state, stores a local index,
+and uses tmux/ssh for attach and discovery. The project name is Tmux Workbench;
+the binary command remains `ws`.
 
 Stack:
 
