@@ -117,13 +117,15 @@ fn draw_tui(
     loop {
         apply_completed_refresh(
             &refresh_rx,
-            &mut auto_refresh_in_flight,
-            &mut workspaces,
-            &mut state,
+            RefreshApply {
+                auto_refresh_in_flight: &mut auto_refresh_in_flight,
+                workspaces: &mut workspaces,
+                state: &mut state,
+                scan_status: &mut scan_status,
+            },
             &search,
             view,
             server_filter.as_deref(),
-            &mut scan_status,
         );
 
         if last_auto_refresh.elapsed() >= AUTO_REFRESH_INTERVAL && !auto_refresh_in_flight {
@@ -316,15 +318,13 @@ fn draw_tui(
                             scan_status = "Scan: manual refresh complete".to_string();
                             last_auto_refresh = Instant::now();
                         }
-                        KeyCode::Char('j') | KeyCode::Down => {
-                            if !filtered.is_empty() {
-                                let next = state
-                                    .selected()
-                                    .unwrap_or(0)
-                                    .saturating_add(1)
-                                    .min(filtered.len() - 1);
-                                state.select(Some(next));
-                            }
+                        KeyCode::Char('j') | KeyCode::Down if !filtered.is_empty() => {
+                            let next = state
+                                .selected()
+                                .unwrap_or(0)
+                                .saturating_add(1)
+                                .min(filtered.len() - 1);
+                            state.select(Some(next));
                         }
                         KeyCode::Char('k') | KeyCode::Up => {
                             let prev = state.selected().unwrap_or(0).saturating_sub(1);
@@ -555,35 +555,44 @@ fn scan_style(scan_status: &str) -> Style {
     }
 }
 
+struct RefreshApply<'a> {
+    auto_refresh_in_flight: &'a mut bool,
+    workspaces: &'a mut Vec<Workspace>,
+    state: &'a mut ListState,
+    scan_status: &'a mut String,
+}
+
 fn apply_completed_refresh(
     refresh_rx: &Receiver<RefreshResult>,
-    auto_refresh_in_flight: &mut bool,
-    workspaces: &mut Vec<Workspace>,
-    state: &mut ListState,
+    apply: RefreshApply<'_>,
     search: &str,
     view: WorkspaceView,
     server_filter: Option<&str>,
-    scan_status: &mut String,
 ) {
     while let Ok(result) = refresh_rx.try_recv() {
-        *auto_refresh_in_flight = false;
+        *apply.auto_refresh_in_flight = false;
         match result {
             Ok(payload) => {
-                let selected_id =
-                    selected_workspace_id(&workspaces, &state, &search, view, server_filter);
-                *workspaces = payload.workspaces;
+                let selected_id = selected_workspace_id(
+                    apply.workspaces,
+                    apply.state,
+                    search,
+                    view,
+                    server_filter,
+                );
+                *apply.workspaces = payload.workspaces;
                 restore_selection(
-                    workspaces,
-                    state,
+                    apply.workspaces,
+                    apply.state,
                     selected_id.as_deref(),
                     search,
                     view,
                     server_filter,
                 );
-                *scan_status = scan_status_from_summary(&payload.summary);
+                *apply.scan_status = scan_status_from_summary(&payload.summary);
             }
             Err(err) => {
-                *scan_status = format!("Scan: failed ({err})");
+                *apply.scan_status = format!("Scan: failed ({err})");
             }
         }
     }

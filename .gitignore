@@ -1,1 +1,5 @@
 /target
+.DS_Store
+PRODUCT_NOTES.md
+*.log
+*.tmp

@@ -1,5 +1,9 @@
 # Tmux Workbench
 
+[![CI](https://github.com/LeON-Nie-code/tmux-workbench/actions/workflows/ci.yml/badge.svg)](https://github.com/LeON-Nie-code/tmux-workbench/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](Cargo.toml)
+
 **Tmux Workbench** is a terminal workspace memory manager for local and remote
 tmux sessions.
 
@@ -45,6 +49,13 @@ cargo run -- <command>
 ```
 
 Binary releases and Homebrew packaging are planned.
+
+Requirements:
+
+- Rust 1.85 or newer
+- tmux
+- git
+- ssh for remote servers
 
 ## Quick Start
 
@@ -196,3 +207,5 @@ Planned:
 - pane layout restore
 - demo GIF or asciinema
 - packaged binary releases
+
+See [ROADMAP.md](ROADMAP.md) for the current project direction.
