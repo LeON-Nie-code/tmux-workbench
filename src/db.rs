@@ -48,6 +48,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
           agent text not null,
           note text not null default '',
           status text not null default 'active',
+          presence text not null default 'seen',
           tags text not null default '',
           last_seen text not null,
           last_attached_at text,
@@ -99,6 +100,12 @@ pub fn migrate(conn: &Connection) -> Result<()> {
     add_column_if_missing(
         conn,
         "workspaces",
+        "presence",
+        "alter table workspaces add column presence text not null default 'seen'",
+    )?;
+    add_column_if_missing(
+        conn,
+        "workspaces",
         "git_branch",
         "alter table workspaces add column git_branch text",
     )?;
@@ -132,6 +139,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         "git_behind",
         "alter table workspaces add column git_behind integer",
     )?;
+    conn.pragma_update(None, "user_version", 1)?;
     Ok(())
 }
 
@@ -154,8 +162,8 @@ fn add_column_if_missing(
 
 pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
     conn.execute(
-        "insert into workspaces (id, name, alias, server, session, root_path, agent, note, status, tags, last_seen, last_attached_at, attach_count, git_branch, git_head, git_remote, git_dirty, git_ahead, git_behind)
-         values (?1, ?2, (select alias from workspaces where id = ?1), ?3, ?4, ?5, ?6, coalesce((select note from workspaces where id = ?1), ''), coalesce((select status from workspaces where id = ?1), 'active'), coalesce((select tags from workspaces where id = ?1), ''), ?7, (select last_attached_at from workspaces where id = ?1), coalesce((select attach_count from workspaces where id = ?1), 0), ?8, ?9, ?10, ?11, ?12, ?13)
+        "insert into workspaces (id, name, alias, server, session, root_path, agent, note, status, presence, tags, last_seen, last_attached_at, attach_count, git_branch, git_head, git_remote, git_dirty, git_ahead, git_behind)
+         values (?1, ?2, (select alias from workspaces where id = ?1), ?3, ?4, ?5, ?6, coalesce((select note from workspaces where id = ?1), ''), coalesce((select status from workspaces where id = ?1), 'active'), 'seen', coalesce((select tags from workspaces where id = ?1), ''), ?7, (select last_attached_at from workspaces where id = ?1), coalesce((select attach_count from workspaces where id = ?1), 0), ?8, ?9, ?10, ?11, ?12, ?13)
          on conflict(id) do update set
            name = excluded.name,
            server = excluded.server,
@@ -166,6 +174,7 @@ pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
            alias = workspaces.alias,
            note = workspaces.note,
            status = workspaces.status,
+           presence = excluded.presence,
            tags = workspaces.tags,
            last_attached_at = workspaces.last_attached_at,
            attach_count = workspaces.attach_count,
@@ -212,7 +221,7 @@ pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
 
 pub fn load_workspaces(conn: &Connection) -> Result<Vec<Workspace>> {
     let mut stmt = conn.prepare(
-        "select id, name, alias, server, session, root_path, agent, note, status, tags, last_seen, last_attached_at, attach_count, git_branch, git_head, git_remote, git_dirty, git_ahead, git_behind
+        "select id, name, alias, server, session, root_path, agent, note, status, presence, tags, last_seen, last_attached_at, attach_count, git_branch, git_head, git_remote, git_dirty, git_ahead, git_behind
          from workspaces order by coalesce(last_attached_at, last_seen) desc, name",
     )?;
     let rows = stmt.query_map([], |row| {
@@ -226,17 +235,18 @@ pub fn load_workspaces(conn: &Connection) -> Result<Vec<Workspace>> {
             agent: row.get(6)?,
             note: row.get(7)?,
             status: row.get(8)?,
-            tags: parse_tags(&row.get::<_, String>(9)?),
-            last_seen: row.get(10)?,
-            last_attached_at: row.get(11)?,
-            attach_count: row.get(12)?,
+            presence: row.get(9)?,
+            tags: parse_tags(&row.get::<_, String>(10)?),
+            last_seen: row.get(11)?,
+            last_attached_at: row.get(12)?,
+            attach_count: row.get(13)?,
             git: git_info_from_row(
-                row.get(13)?,
                 row.get(14)?,
                 row.get(15)?,
                 row.get(16)?,
                 row.get(17)?,
                 row.get(18)?,
+                row.get(19)?,
             ),
             panes: Vec::new(),
         })
@@ -249,6 +259,14 @@ pub fn load_workspaces(conn: &Connection) -> Result<Vec<Workspace>> {
         workspaces.push(ws);
     }
     Ok(workspaces)
+}
+
+pub fn mark_server_missing(conn: &Connection, server: &str) -> Result<usize> {
+    conn.execute(
+        "update workspaces set presence = 'missing' where server = ?1",
+        params![server],
+    )
+    .map_err(Into::into)
 }
 
 fn git_info_from_row(
@@ -406,6 +424,7 @@ mod tests {
         assert_eq!(workspace.alias.as_deref(), Some("alias"));
         assert_eq!(workspace.note, "note");
         assert_eq!(workspace.status, "paused");
+        assert_eq!(workspace.presence, "seen");
         assert_eq!(workspace.tags, vec!["tag"]);
         assert!(workspace.last_attached_at.is_some());
         assert_eq!(workspace.attach_count, 1);
@@ -431,6 +450,7 @@ mod tests {
             }],
             note: String::new(),
             status: "active".to_string(),
+            presence: "seen".to_string(),
             tags: Vec::new(),
             last_seen: "now".to_string(),
             last_attached_at: None,

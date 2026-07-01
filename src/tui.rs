@@ -66,10 +66,11 @@ fn selected_workspace_id(
     workspaces: &[Workspace],
     state: &ListState,
     search: &str,
-    show_archived: bool,
+    view: WorkspaceView,
+    server_filter: Option<&str>,
 ) -> Option<String> {
     let selected = state.selected()?;
-    let filtered = filtered_indices(workspaces, search, show_archived);
+    let filtered = filtered_indices(workspaces, search, view, server_filter);
     filtered
         .get(selected)
         .map(|index| workspaces[*index].id.clone())
@@ -80,9 +81,10 @@ fn restore_selection(
     state: &mut ListState,
     selected_id: Option<&str>,
     search: &str,
-    show_archived: bool,
+    view: WorkspaceView,
+    server_filter: Option<&str>,
 ) {
-    let filtered = filtered_indices(workspaces, search, show_archived);
+    let filtered = filtered_indices(workspaces, search, view, server_filter);
     if filtered.is_empty() {
         state.select(None);
         return;
@@ -105,7 +107,8 @@ fn draw_tui(
     state.select(Some(0));
     let mut search = String::new();
     let mut mode = InputMode::Normal;
-    let mut show_archived = true;
+    let mut view = WorkspaceView::All;
+    let mut server_filter: Option<String> = None;
     let mut last_auto_refresh = Instant::now();
     let mut auto_refresh_in_flight = false;
     let mut scan_status = String::from("Scan: idle");
@@ -118,7 +121,8 @@ fn draw_tui(
             &mut workspaces,
             &mut state,
             &search,
-            show_archived,
+            view,
+            server_filter.as_deref(),
             &mut scan_status,
         );
 
@@ -129,7 +133,7 @@ fn draw_tui(
             last_auto_refresh = Instant::now();
         }
 
-        let filtered = filtered_indices(&workspaces, &search, show_archived);
+        let filtered = filtered_indices(&workspaces, &search, view, server_filter.as_deref());
         if filtered.is_empty() {
             state.select(None);
         } else {
@@ -144,8 +148,15 @@ fn draw_tui(
                 .split(frame.area());
 
             let title = match mode {
-                InputMode::Normal if search.is_empty() => workspace_list_title(show_archived),
-                InputMode::Normal => format!("{}  /{search}", workspace_list_title(show_archived)),
+                InputMode::Normal if search.is_empty() => {
+                    workspace_list_title(view, server_filter.as_deref())
+                }
+                InputMode::Normal => {
+                    format!(
+                        "{}  /{search}",
+                        workspace_list_title(view, server_filter.as_deref())
+                    )
+                }
                 InputMode::Search => format!("Search  /{search}"),
             };
             let items: Vec<ListItem> = filtered
@@ -164,7 +175,7 @@ fn draw_tui(
                         ),
                         Span::raw(format!("{:<20}", truncate(&ws.server, 20))),
                         Span::raw(format!("{:<8}", truncate(&ws.agent, 8))),
-                        Span::raw(format!("{:<8}", truncate(&ws.status, 8))),
+                        Span::raw(format!("{:<12}", truncate(&workspace_state(ws), 12))),
                     ]))
                     .style(style)
                 })
@@ -183,7 +194,7 @@ fn draw_tui(
             lines.push(Line::from(""));
             lines.push(Line::from(scan_status.clone()));
             lines.push(Line::from(match mode {
-                InputMode::Normal => controls_line(show_archived),
+                InputMode::Normal => controls_line(view),
                 InputMode::Search => "Type to search  Enter accept  Esc clear",
             }));
 
@@ -214,27 +225,80 @@ fn draw_tui(
                             }
                         }
                         KeyCode::Char('z') => {
-                            let selected_id =
-                                selected_workspace_id(&workspaces, &state, &search, show_archived);
-                            show_archived = !show_archived;
+                            let selected_id = selected_workspace_id(
+                                &workspaces,
+                                &state,
+                                &search,
+                                view,
+                                server_filter.as_deref(),
+                            );
+                            view = if view == WorkspaceView::Archived {
+                                WorkspaceView::All
+                            } else {
+                                WorkspaceView::Archived
+                            };
                             restore_selection(
                                 &workspaces,
                                 &mut state,
                                 selected_id.as_deref(),
                                 &search,
-                                show_archived,
+                                view,
+                                server_filter.as_deref(),
+                            );
+                        }
+                        KeyCode::Char('v') => {
+                            let selected_id = selected_workspace_id(
+                                &workspaces,
+                                &state,
+                                &search,
+                                view,
+                                server_filter.as_deref(),
+                            );
+                            view = view.next();
+                            restore_selection(
+                                &workspaces,
+                                &mut state,
+                                selected_id.as_deref(),
+                                &search,
+                                view,
+                                server_filter.as_deref(),
+                            );
+                        }
+                        KeyCode::Char('s') => {
+                            let selected_id = selected_workspace_id(
+                                &workspaces,
+                                &state,
+                                &search,
+                                view,
+                                server_filter.as_deref(),
+                            );
+                            server_filter =
+                                next_server_filter(&workspaces, server_filter.as_deref());
+                            restore_selection(
+                                &workspaces,
+                                &mut state,
+                                selected_id.as_deref(),
+                                &search,
+                                view,
+                                server_filter.as_deref(),
                             );
                         }
                         KeyCode::Char('r') => {
-                            let selected_id =
-                                selected_workspace_id(&workspaces, &state, &search, show_archived);
+                            let selected_id = selected_workspace_id(
+                                &workspaces,
+                                &state,
+                                &search,
+                                view,
+                                server_filter.as_deref(),
+                            );
                             workspaces = rescan_from_tui(terminal)?;
                             restore_selection(
                                 &workspaces,
                                 &mut state,
                                 selected_id.as_deref(),
                                 &search,
-                                show_archived,
+                                view,
+                                server_filter.as_deref(),
                             );
                             scan_status = "Scan: manual refresh complete".to_string();
                             last_auto_refresh = Instant::now();
@@ -296,7 +360,8 @@ fn apply_completed_refresh(
     workspaces: &mut Vec<Workspace>,
     state: &mut ListState,
     search: &str,
-    show_archived: bool,
+    view: WorkspaceView,
+    server_filter: Option<&str>,
     scan_status: &mut String,
 ) {
     while let Ok(result) = refresh_rx.try_recv() {
@@ -304,14 +369,15 @@ fn apply_completed_refresh(
         match result {
             Ok(payload) => {
                 let selected_id =
-                    selected_workspace_id(&workspaces, &state, &search, show_archived);
+                    selected_workspace_id(&workspaces, &state, &search, view, server_filter);
                 *workspaces = payload.workspaces;
                 restore_selection(
                     workspaces,
                     state,
                     selected_id.as_deref(),
                     search,
-                    show_archived,
+                    view,
+                    server_filter,
                 );
                 *scan_status = scan_status_from_summary(&payload.summary);
             }
@@ -356,7 +422,38 @@ enum InputMode {
     Search,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WorkspaceView {
+    All,
+    Active,
+    Archived,
+}
+
+impl WorkspaceView {
+    fn next(self) -> Self {
+        match self {
+            WorkspaceView::All => WorkspaceView::Active,
+            WorkspaceView::Active => WorkspaceView::Archived,
+            WorkspaceView::Archived => WorkspaceView::All,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            WorkspaceView::All => "all",
+            WorkspaceView::Active => "active",
+            WorkspaceView::Archived => "archived",
+        }
+    }
+}
+
 fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
+    let active_command = ws
+        .panes
+        .iter()
+        .find(|pane| pane.active)
+        .map(|pane| format!("{} in {}", pane.command, pane.path))
+        .unwrap_or_else(|| "-".to_string());
     let pane_lines: Vec<Line> = ws
         .panes
         .iter()
@@ -379,7 +476,10 @@ fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
         Line::from(format!("Session: {}", ws.session)),
         Line::from(format!("Path: {}", ws.root_path)),
         Line::from(format!("Agent: {}", ws.agent)),
+        Line::from(format!("Panes: {}", ws.panes.len())),
+        Line::from(format!("Active: {}", active_command)),
         Line::from(format!("Status: {}", ws.status)),
+        Line::from(format!("Presence: {}", ws.presence)),
         Line::from(format!("Tags: {}", ws.tags.join(", "))),
         Line::from(format!("Git: {}", git_detail(ws))),
         Line::from(format!("Last seen: {}", ws.last_seen)),
@@ -389,7 +489,7 @@ fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
         )),
         Line::from(format!("Attach count: {}", ws.attach_count)),
         Line::from(""),
-        Line::from("Panes:"),
+        Line::from("Pane detail:"),
         Line::from("A window         pane cmd        path"),
     ];
     lines.extend(pane_lines);
@@ -425,19 +525,22 @@ fn git_detail(ws: &Workspace) -> String {
     )
 }
 
-fn workspace_list_title(show_archived: bool) -> String {
-    if show_archived {
-        "Workspaces (all)".to_string()
-    } else {
-        "Workspaces (active)".to_string()
-    }
+fn workspace_list_title(view: WorkspaceView, server_filter: Option<&str>) -> String {
+    format!(
+        "Workspaces ({}, {})",
+        view.label(),
+        server_filter.unwrap_or("all servers")
+    )
 }
 
-fn controls_line(show_archived: bool) -> &'static str {
-    if show_archived {
-        "Enter attach  / search  n note  a archive  z hide archived  r rescan  q quit"
-    } else {
-        "Enter attach  / search  n note  a archive  z show archived  r rescan  q quit"
+fn controls_line(view: WorkspaceView) -> &'static str {
+    match view {
+        WorkspaceView::Archived => {
+            "Enter attach  / search  n note  a unarchive  v view  s server  z all  r rescan  q quit"
+        }
+        _ => {
+            "Enter attach  / search  n note  a archive  v view  s server  z archived  r rescan  q quit"
+        }
     }
 }
 
@@ -445,18 +548,79 @@ fn display_name(ws: &Workspace) -> &str {
     ws.alias.as_deref().unwrap_or(&ws.name)
 }
 
-fn filtered_indices(workspaces: &[Workspace], search: &str, show_archived: bool) -> Vec<usize> {
-    let needle = search.trim().to_lowercase();
+fn filtered_indices(
+    workspaces: &[Workspace],
+    search: &str,
+    view: WorkspaceView,
+    server_filter: Option<&str>,
+) -> Vec<usize> {
+    let query = SearchQuery::parse(search);
     workspaces
         .iter()
         .enumerate()
-        .filter(|(_, ws)| show_archived || ws.status != "archived")
-        .filter(|(_, ws)| needle.is_empty() || workspace_matches(ws, &needle))
+        .filter(|(_, ws)| workspace_in_view(ws, view))
+        .filter(|(_, ws)| server_filter.is_none_or(|server| ws.server == server))
+        .filter(|(_, ws)| query.matches(ws))
         .map(|(index, _)| index)
         .collect()
 }
 
+fn workspace_in_view(ws: &Workspace, view: WorkspaceView) -> bool {
+    match view {
+        WorkspaceView::All => true,
+        WorkspaceView::Active => ws.status != "archived",
+        WorkspaceView::Archived => ws.status == "archived",
+    }
+}
+
+#[derive(Debug, Default)]
+struct SearchQuery {
+    text: Vec<String>,
+    server: Vec<String>,
+    status: Vec<String>,
+    tag: Vec<String>,
+    git: Vec<String>,
+}
+
+impl SearchQuery {
+    fn parse(search: &str) -> Self {
+        let mut query = SearchQuery::default();
+        for token in search.split_whitespace() {
+            let token = token.to_lowercase();
+            if let Some(value) = token.strip_prefix("server:") {
+                query.server.push(value.to_string());
+            } else if let Some(value) = token.strip_prefix("status:") {
+                query.status.push(value.to_string());
+            } else if let Some(value) = token.strip_prefix("tag:") {
+                query.tag.push(value.to_string());
+            } else if let Some(value) = token.strip_prefix("git:") {
+                query.git.push(value.to_string());
+            } else if !token.is_empty() {
+                query.text.push(token);
+            }
+        }
+        query
+    }
+
+    fn matches(&self, ws: &Workspace) -> bool {
+        self.server
+            .iter()
+            .all(|value| ws.server.to_lowercase().contains(value))
+            && self
+                .status
+                .iter()
+                .all(|value| ws.status.to_lowercase().contains(value))
+            && self
+                .tag
+                .iter()
+                .all(|value| ws.tags.iter().any(|tag| tag.to_lowercase().contains(value)))
+            && self.git.iter().all(|value| git_matches(ws, value))
+            && self.text.iter().all(|value| workspace_matches(ws, value))
+    }
+}
+
 fn workspace_matches(ws: &Workspace, needle: &str) -> bool {
+    let needle = &needle.to_lowercase();
     [
         ws.id.as_str(),
         ws.name.as_str(),
@@ -466,6 +630,7 @@ fn workspace_matches(ws: &Workspace, needle: &str) -> bool {
         ws.root_path.as_str(),
         ws.agent.as_str(),
         ws.status.as_str(),
+        ws.presence.as_str(),
         ws.note.as_str(),
     ]
     .iter()
@@ -484,6 +649,51 @@ fn workspace_matches(ws: &Workspace, needle: &str) -> bool {
             .iter()
             .any(|value| value.to_lowercase().contains(needle))
         })
+}
+
+fn git_matches(ws: &Workspace, needle: &str) -> bool {
+    let Some(git) = &ws.git else {
+        return needle == "none";
+    };
+    match needle {
+        "dirty" => git.dirty,
+        "clean" => !git.dirty,
+        "remote" => git.remote.is_some(),
+        "ahead" => git.ahead > 0,
+        "behind" => git.behind > 0,
+        value => [
+            git.branch.as_deref().unwrap_or(""),
+            git.head.as_deref().unwrap_or(""),
+            git.remote.as_deref().unwrap_or(""),
+        ]
+        .iter()
+        .any(|field| field.to_lowercase().contains(value)),
+    }
+}
+
+fn workspace_state(ws: &Workspace) -> String {
+    if ws.presence == "seen" {
+        ws.status.clone()
+    } else {
+        format!("{}/{}", ws.status, ws.presence)
+    }
+}
+
+fn next_server_filter(workspaces: &[Workspace], current: Option<&str>) -> Option<String> {
+    let mut servers = workspaces
+        .iter()
+        .map(|ws| ws.server.as_str())
+        .collect::<Vec<_>>();
+    servers.sort_unstable();
+    servers.dedup();
+    if servers.is_empty() {
+        return None;
+    }
+
+    let next = current
+        .and_then(|server| servers.iter().position(|item| *item == server))
+        .map_or(0, |index| index + 1);
+    servers.get(next).map(|server| (*server).to_string())
 }
 
 fn edit_note_from_tui(
@@ -547,7 +757,7 @@ fn rescan_from_tui(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<
 mod tests {
     use crate::model::{Pane, Workspace};
 
-    use super::{filtered_indices, note_lines, workspace_matches};
+    use super::{SearchQuery, WorkspaceView, filtered_indices, note_lines, workspace_matches};
 
     #[test]
     fn search_matches_workspace_metadata_and_panes() {
@@ -569,6 +779,7 @@ mod tests {
             }],
             note: "uses uv".to_string(),
             status: "active".to_string(),
+            presence: "seen".to_string(),
             tags: vec!["research".to_string()],
             last_seen: "now".to_string(),
             last_attached_at: None,
@@ -581,16 +792,33 @@ mod tests {
         assert!(workspace_matches(&workspace, "demo-alias"));
         assert!(workspace_matches(&workspace, "research"));
         assert!(!workspace_matches(&workspace, "missing"));
+
+        assert!(SearchQuery::parse("server:serv status:active tag:research").matches(&workspace));
+        assert!(!SearchQuery::parse("server:other").matches(&workspace));
     }
 
     #[test]
-    fn archived_workspaces_are_hidden_until_requested() {
+    fn workspace_view_filters_status() {
         let active = test_workspace("server/active", "active");
         let archived = test_workspace("server/archived", "archived");
         let workspaces = vec![active, archived];
 
-        assert_eq!(filtered_indices(&workspaces, "", false), vec![0]);
-        assert_eq!(filtered_indices(&workspaces, "", true), vec![0, 1]);
+        assert_eq!(
+            filtered_indices(&workspaces, "", WorkspaceView::Active, None),
+            vec![0]
+        );
+        assert_eq!(
+            filtered_indices(&workspaces, "", WorkspaceView::All, None),
+            vec![0, 1]
+        );
+        assert_eq!(
+            filtered_indices(&workspaces, "", WorkspaceView::Archived, None),
+            vec![1]
+        );
+        assert_eq!(
+            filtered_indices(&workspaces, "", WorkspaceView::All, Some("server")),
+            vec![0, 1]
+        );
     }
 
     #[test]
@@ -615,6 +843,7 @@ mod tests {
             panes: Vec::new(),
             note: String::new(),
             status: status.to_string(),
+            presence: "seen".to_string(),
             tags: Vec::new(),
             last_seen: "now".to_string(),
             last_attached_at: None,

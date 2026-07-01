@@ -26,6 +26,7 @@ pub struct Workspace {
     pub panes: Vec<Pane>,
     pub note: String,
     pub status: String,
+    pub presence: String,
     pub tags: Vec<String>,
     pub last_seen: String,
     pub last_attached_at: Option<String>,
