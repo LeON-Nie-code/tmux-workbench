@@ -38,6 +38,7 @@ enum Commands {
     Init,
     Scan,
     List,
+    OpenConfig,
     Attach { workspace: String },
     Recreate { workspace: String },
     Note { workspace: String, note: String },
@@ -96,6 +97,7 @@ fn main() -> Result<()> {
         Some(Commands::Init) => init_config(),
         Some(Commands::Scan) => scan(),
         Some(Commands::List) => list_workspaces(),
+        Some(Commands::OpenConfig) => open_config(),
         Some(Commands::Attach { workspace }) => attach(&workspace),
         Some(Commands::Recreate { workspace }) => recreate(&workspace),
         Some(Commands::Note { workspace, note }) => set_note(&workspace, &note),
@@ -174,6 +176,14 @@ fn list_workspaces() -> Result<()> {
         println!("{:<44} {:<8} {}", ws.id, ws.agent, ws.root_path);
     }
     Ok(())
+}
+
+fn open_config() -> Result<()> {
+    let path = config_path()?;
+    if !path.exists() {
+        init_config()?;
+    }
+    edit_file(&path)
 }
 
 fn attach(name: &str) -> Result<()> {
@@ -361,9 +371,10 @@ fn draw_tui(
     state.select(Some(0));
     let mut search = String::new();
     let mut mode = InputMode::Normal;
+    let mut show_archived = false;
 
     loop {
-        let filtered = filtered_indices(&workspaces, &search);
+        let filtered = filtered_indices(&workspaces, &search, show_archived);
         if filtered.is_empty() {
             state.select(None);
         } else {
@@ -378,8 +389,8 @@ fn draw_tui(
                 .split(frame.area());
 
             let title = match mode {
-                InputMode::Normal if search.is_empty() => "Workspaces".to_string(),
-                InputMode::Normal => format!("Workspaces  /{search}"),
+                InputMode::Normal if search.is_empty() => workspace_list_title(show_archived),
+                InputMode::Normal => format!("{}  /{search}", workspace_list_title(show_archived)),
                 InputMode::Search => format!("Search  /{search}"),
             };
             let items: Vec<ListItem> = filtered
@@ -392,6 +403,7 @@ fn draw_tui(
                             Style::default().add_modifier(Modifier::BOLD),
                         ),
                         Span::raw(format!(" {} ", ws.agent)),
+                        Span::raw(format!(" {} ", ws.status)),
                     ]))
                 })
                 .collect();
@@ -408,7 +420,9 @@ fn draw_tui(
             };
             lines.push(Line::from(""));
             lines.push(Line::from(match mode {
-                InputMode::Normal => "Enter attach  / search  n edit note  j/k move  q quit",
+                InputMode::Normal => {
+                    "Enter attach  / search  n note  a archive  z show archived  r rescan  q quit"
+                }
                 InputMode::Search => "Type to search  Enter accept  Esc clear",
             }));
 
@@ -430,6 +444,21 @@ fn draw_tui(
                                 let index = filtered[selected];
                                 edit_note_from_tui(terminal, &mut workspaces[index])?;
                             }
+                        }
+                        KeyCode::Char('a') => {
+                            if let Some(selected) = state.selected() {
+                                let index = filtered[selected];
+                                toggle_archive(&mut workspaces[index])?;
+                                state.select(Some(0));
+                            }
+                        }
+                        KeyCode::Char('z') => {
+                            show_archived = !show_archived;
+                            state.select(Some(0));
+                        }
+                        KeyCode::Char('r') => {
+                            workspaces = rescan_from_tui(terminal)?;
+                            state.select(Some(0));
                         }
                         KeyCode::Char('j') | KeyCode::Down => {
                             if !filtered.is_empty() {
@@ -522,11 +551,20 @@ fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
     lines
 }
 
-fn filtered_indices(workspaces: &[Workspace], search: &str) -> Vec<usize> {
+fn workspace_list_title(show_archived: bool) -> String {
+    if show_archived {
+        "Workspaces (all)".to_string()
+    } else {
+        "Workspaces".to_string()
+    }
+}
+
+fn filtered_indices(workspaces: &[Workspace], search: &str, show_archived: bool) -> Vec<usize> {
     let needle = search.trim().to_lowercase();
     workspaces
         .iter()
         .enumerate()
+        .filter(|(_, ws)| show_archived || ws.status != "archived")
         .filter(|(_, ws)| needle.is_empty() || workspace_matches(ws, &needle))
         .map(|(index, _)| index)
         .collect()
@@ -582,6 +620,40 @@ fn edit_note_from_tui(
     Ok(())
 }
 
+fn toggle_archive(workspace: &mut Workspace) -> Result<()> {
+    let next_status = if workspace.status == "archived" {
+        "active"
+    } else {
+        "archived"
+    };
+    let conn = open_db()?;
+    migrate(&conn)?;
+    conn.execute(
+        "update workspaces set status = ?1 where id = ?2",
+        params![next_status, workspace.id],
+    )?;
+    workspace.status = next_status.to_string();
+    Ok(())
+}
+
+fn rescan_from_tui(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<Vec<Workspace>> {
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    let result = scan();
+    println!();
+    println!("Press Enter to return to ws...");
+    let mut input = String::new();
+    let _ = io::stdin().read_line(&mut input);
+    execute!(terminal.backend_mut(), EnterAlternateScreen)?;
+    enable_raw_mode()?;
+    terminal.clear()?;
+    result?;
+
+    let conn = open_db()?;
+    migrate(&conn)?;
+    load_workspaces(&conn)
+}
+
 fn edit_note(workspace_id: &str, current_note: &str) -> Result<Option<String>> {
     let mut path = std::env::temp_dir();
     path.push(format!(
@@ -595,6 +667,22 @@ fn edit_note(workspace_id: &str, current_note: &str) -> Result<Option<String>> {
         file.write_all(current_note.as_bytes())?;
     }
 
+    if let Err(err) = edit_file(&path) {
+        let _ = fs::remove_file(&path);
+        return Err(err);
+    }
+
+    let next =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    let _ = fs::remove_file(&path);
+    if next == current_note {
+        Ok(None)
+    } else {
+        Ok(Some(next))
+    }
+}
+
+fn edit_file(path: &PathBuf) -> Result<()> {
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
     let command = format!("{} {}", editor, shell_quote(&path.to_string_lossy()));
     let status = Command::new("sh")
@@ -606,18 +694,9 @@ fn edit_note(workspace_id: &str, current_note: &str) -> Result<Option<String>> {
         .status()
         .context("failed to run editor")?;
     if !status.success() {
-        let _ = fs::remove_file(&path);
         bail!("editor exited with status {status}");
     }
-
-    let next =
-        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
-    let _ = fs::remove_file(&path);
-    if next == current_note {
-        Ok(None)
-    } else {
-        Ok(Some(next))
-    }
+    Ok(())
 }
 
 fn sanitize_filename(value: &str) -> String {
@@ -1027,8 +1106,8 @@ fn attach_ssh_command(ssh: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        Pane, Workspace, attach_ssh_command, sanitize_filename, tmux_attach_command,
-        workspace_matches,
+        Pane, Workspace, attach_ssh_command, filtered_indices, sanitize_filename,
+        tmux_attach_command, workspace_matches,
     };
 
     #[test]
@@ -1086,5 +1165,32 @@ mod tests {
             sanitize_filename("AI-Teacher-Baidu/NeuroPlay"),
             "AI-Teacher-Baidu_NeuroPlay"
         );
+    }
+
+    #[test]
+    fn archived_workspaces_are_hidden_until_requested() {
+        let active = test_workspace("server/active", "active");
+        let archived = test_workspace("server/archived", "archived");
+        let workspaces = vec![active, archived];
+
+        assert_eq!(filtered_indices(&workspaces, "", false), vec![0]);
+        assert_eq!(filtered_indices(&workspaces, "", true), vec![0, 1]);
+    }
+
+    fn test_workspace(id: &str, status: &str) -> Workspace {
+        Workspace {
+            id: id.to_string(),
+            name: id.to_string(),
+            server: "server".to_string(),
+            session: id.to_string(),
+            root_path: "/tmp".to_string(),
+            agent: "bash".to_string(),
+            panes: Vec::new(),
+            note: String::new(),
+            status: status.to_string(),
+            last_seen: "now".to_string(),
+            last_attached_at: None,
+            attach_count: 0,
+        }
     }
 }

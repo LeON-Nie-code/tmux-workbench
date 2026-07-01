@@ -75,6 +75,12 @@ Check SSH, tmux, and indexed session health:
 cargo run -- doctor
 ```
 
+Edit the config:
+
+```bash
+cargo run -- open-config
+```
+
 Add a note:
 
 ```bash
@@ -93,6 +99,9 @@ TUI shortcuts:
 Enter  attach
 /      search by name, server, path, agent, note, or pane
 n      edit note in $EDITOR
+a      archive or unarchive workspace
+z      show or hide archived workspaces
+r      rescan servers
 j/k    move
 q      quit
 ```
@@ -128,10 +137,12 @@ Implemented:
 - attach preflight checks
 - recreate missing sessions from indexed paths
 - server and session health checks
+- config editing from CLI
+- archive/unarchive from the TUI
+- rescan from the TUI
 
 Next:
 
 - pane layout restore
 - richer workspace notes and todos
 - installable binary release
-- config editing from CLI
