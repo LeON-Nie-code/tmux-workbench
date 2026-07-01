@@ -18,6 +18,10 @@ back to work.
 ws
 ```
 
+<p align="center">
+  <img src="docs/assets/tui-overview.svg" alt="Tmux Workbench TUI overview" width="100%">
+</p>
+
 ## Why
 
 SSH plus tmux is resilient, but it does not remember enough when your work is
@@ -44,6 +48,10 @@ resume.
 - Capture git repository state for each workspace.
 - Refresh in the background without blocking the TUI.
 - Store state locally in SQLite.
+
+<p align="center">
+  <img src="docs/assets/search-filter.svg" alt="Tmux Workbench structured search" width="100%">
+</p>
 
 ## Installation
 
@@ -212,6 +220,10 @@ Local index:
 
 Tmux Workbench reads tmux state, stores a local index, and uses tmux/ssh for
 attach and discovery.
+
+<p align="center">
+  <img src="docs/assets/workflow.svg" alt="Tmux Workbench workflow" width="100%">
+</p>
 
 ```text
 tmux list-panes  ->  ws scan  ->  SQLite index  ->  CLI/TUI

@@ -1,12 +1,18 @@
 # Demo
 
-This page is a placeholder for the first public demo.
+This page tracks demo assets for the first public release.
+
+## Current Assets
+
+- `docs/assets/tui-overview.svg`
+- `docs/assets/search-filter.svg`
+- `docs/assets/workflow.svg`
 
 Planned assets:
 
 - 20-30 second asciinema recording
 - short GIF for the README
-- screenshots for the TUI list and detail views
+- real terminal screenshots for the TUI list and detail views
 
 Suggested flow:
 

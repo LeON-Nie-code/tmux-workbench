@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-labelledby="title desc">
+  <title id="title">Tmux Workbench workflow</title>
+  <desc id="desc">A workflow diagram showing how tmux and git state flow into the Tmux Workbench local SQLite index and CLI/TUI.</desc>
+  <defs>
+    <style>
+      .bg { fill: #0d1117; }
+      .box { fill: #111820; stroke: #30363d; stroke-width: 2; }
+      .accent { fill: #56d4dd; }
+      .text { fill: #e6edf3; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+      .muted { fill: #8b949e; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+      .title { fill: #f0f6fc; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-weight: 800; }
+    </style>
+  </defs>
+  <rect width="1280" height="360" rx="18" class="bg"/>
+  <text x="56" y="58" font-size="24" class="title">How Tmux Workbench fits into your SSH + tmux workflow</text>
+
+  <rect x="60" y="106" width="250" height="120" rx="12" class="box"/>
+  <text x="92" y="148" font-size="20" class="title">tmux sessions</text>
+  <text x="92" y="182" font-size="15" class="muted">local + SSH servers</text>
+
+  <rect x="388" y="106" width="250" height="120" rx="12" class="box"/>
+  <text x="438" y="148" font-size="20" class="title">ws scan</text>
+  <text x="438" y="182" font-size="15" class="muted">panes, paths, git</text>
+
+  <rect x="716" y="106" width="250" height="120" rx="12" class="box"/>
+  <text x="760" y="148" font-size="20" class="title">SQLite index</text>
+  <text x="760" y="182" font-size="15" class="muted">notes, tags, history</text>
+
+  <rect x="1044" y="106" width="176" height="120" rx="12" class="box"/>
+  <text x="1090" y="148" font-size="20" class="title">ws</text>
+  <text x="1072" y="182" font-size="15" class="muted">CLI / TUI</text>
+
+  <path d="M320 166 H372" stroke="#56d4dd" stroke-width="4" fill="none"/>
+  <path d="M364 154 L382 166 L364 178" fill="none" stroke="#56d4dd" stroke-width="4"/>
+  <path d="M648 166 H700" stroke="#56d4dd" stroke-width="4" fill="none"/>
+  <path d="M692 154 L710 166 L692 178" fill="none" stroke="#56d4dd" stroke-width="4"/>
+  <path d="M976 166 H1028" stroke="#56d4dd" stroke-width="4" fill="none"/>
+  <path d="M1020 154 L1038 166 L1020 178" fill="none" stroke="#56d4dd" stroke-width="4"/>
+
+  <text x="80" y="288" font-size="16" class="text">Attach by stable ID: &lt;server&gt;/&lt;tmux-session&gt;</text>
+  <text x="80" y="318" font-size="16" class="muted">No hosted service. No tmux replacement. Just a local memory layer for terminal workspaces.</text>
+</svg>

@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" role="img" aria-labelledby="title desc">
+  <title id="title">Tmux Workbench TUI overview</title>
+  <desc id="desc">A terminal screenshot-style overview of the Tmux Workbench TUI showing workspace list, project details, git state, panes, notes, and scan status.</desc>
+  <defs>
+    <style>
+      .bg { fill: #0d1117; }
+      .panel { fill: #111820; stroke: #30363d; stroke-width: 2; }
+      .panel-soft { fill: #0f151d; stroke: #30363d; stroke-width: 2; }
+      .cyan { fill: #56d4dd; }
+      .green { fill: #7ee787; }
+      .yellow { fill: #f2cc60; }
+      .red { fill: #ff7b72; }
+      .muted { fill: #8b949e; }
+      .text { fill: #e6edf3; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+      .dim { fill: #6e7681; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+      .label { fill: #8b949e; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-weight: 700; }
+      .title { fill: #f0f6fc; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-weight: 800; }
+    </style>
+  </defs>
+  <rect width="1280" height="760" rx="18" class="bg"/>
+  <rect x="24" y="22" width="1232" height="716" rx="14" class="panel-soft"/>
+
+  <rect x="48" y="46" width="56" height="28" rx="4" fill="#56d4dd"/>
+  <text x="65" y="66" font-size="18" fill="#0d1117" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="800">ws</text>
+  <text x="124" y="67" font-size="22" class="title">Tmux Workbench</text>
+  <text x="362" y="67" font-size="16" class="muted text">21 shown / 21 total</text>
+  <text x="572" y="67" font-size="16" class="green text">18 active</text>
+  <text x="702" y="67" font-size="16" class="red text">0 missing</text>
+
+  <text x="52" y="104" font-size="15" class="label">view</text>
+  <text x="104" y="104" font-size="15" class="text">all</text>
+  <text x="170" y="104" font-size="15" class="label">server</text>
+  <text x="244" y="104" font-size="15" class="text">all</text>
+  <text x="304" y="104" font-size="15" class="label">mode</text>
+  <text x="366" y="104" font-size="15" class="text">normal</text>
+  <text x="456" y="104" font-size="15" class="label">search</text>
+  <text x="536" y="104" font-size="15" class="text">none</text>
+  <text x="606" y="104" font-size="15" class="label">scan</text>
+  <text x="664" y="104" font-size="15" class="green text">ok, 21 workspaces</text>
+
+  <rect x="48" y="132" width="574" height="540" rx="10" class="panel"/>
+  <text x="72" y="160" font-size="16" class="cyan text" font-weight="800">Workspaces (all, all servers)</text>
+  <text x="72" y="194" font-size="14" class="label">WORKSPACE</text>
+  <text x="292" y="194" font-size="14" class="label">SERVER</text>
+  <text x="474" y="194" font-size="14" class="label">AGENT</text>
+  <text x="546" y="194" font-size="14" class="label">STATE</text>
+
+  <rect x="62" y="210" width="546" height="32" rx="5" fill="#56d4dd"/>
+  <text x="78" y="232" font-size="15" fill="#0d1117" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="800">&gt; neuroplay</text>
+  <text x="292" y="232" font-size="15" fill="#0d1117" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="700">AI-Teacher-Baidu</text>
+  <text x="476" y="232" font-size="15" fill="#0d1117" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">codex</text>
+  <text x="546" y="232" font-size="15" fill="#0d1117" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">active</text>
+
+  <text x="78" y="274" font-size="15" class="text" font-weight="700">tmux-workbench</text>
+  <text x="292" y="274" font-size="15" class="muted text">local</text>
+  <text x="476" y="274" font-size="15" class="yellow text">zsh</text>
+  <text x="546" y="274" font-size="15" class="green text">active</text>
+
+  <text x="78" y="314" font-size="15" class="text" font-weight="700">api-server</text>
+  <text x="292" y="314" font-size="15" class="muted text">prod</text>
+  <text x="476" y="314" font-size="15" class="yellow text">bash</text>
+  <text x="546" y="314" font-size="15" class="green text">active</text>
+
+  <text x="78" y="354" font-size="15" class="dim" font-weight="700">old-dashboard</text>
+  <text x="292" y="354" font-size="15" class="dim">gcloud</text>
+  <text x="476" y="354" font-size="15" class="dim">node</text>
+  <text x="546" y="354" font-size="15" class="dim">archived</text>
+
+  <text x="78" y="394" font-size="15" class="text" font-weight="700">research-notes</text>
+  <text x="292" y="394" font-size="15" class="muted text">laptop</text>
+  <text x="476" y="394" font-size="15" class="yellow text">vim</text>
+  <text x="546" y="394" font-size="15" class="green text">active</text>
+
+  <text x="78" y="434" font-size="15" class="text" font-weight="700">worker</text>
+  <text x="292" y="434" font-size="15" class="muted text">prod</text>
+  <text x="476" y="434" font-size="15" class="yellow text">btop</text>
+  <text x="546" y="434" font-size="15" class="green text">active</text>
+
+  <rect x="650" y="132" width="582" height="540" rx="10" class="panel"/>
+  <text x="674" y="160" font-size="16" class="cyan text" font-weight="800">Workspace</text>
+  <text x="674" y="198" font-size="16" class="cyan text" font-weight="800">Overview</text>
+  <text x="674" y="224" font-size="15" class="label">Name</text>
+  <text x="796" y="224" font-size="15" class="text">neuroplay</text>
+  <text x="674" y="250" font-size="15" class="label">ID</text>
+  <text x="796" y="250" font-size="15" class="text">AI-Teacher-Baidu/NeuroPlay</text>
+  <text x="674" y="276" font-size="15" class="label">Path</text>
+  <text x="796" y="276" font-size="15" class="text">/data/code/NeuroPlay</text>
+  <text x="674" y="302" font-size="15" class="label">Tags</text>
+  <text x="796" y="302" font-size="15" class="text">research, frontend</text>
+
+  <text x="674" y="342" font-size="16" class="cyan text" font-weight="800">Runtime</text>
+  <text x="674" y="368" font-size="15" class="label">Agent</text>
+  <text x="796" y="368" font-size="15" class="yellow text">codex</text>
+  <text x="674" y="394" font-size="15" class="label">Panes</text>
+  <text x="796" y="394" font-size="15" class="text">4</text>
+  <text x="674" y="420" font-size="15" class="label">Active</text>
+  <text x="796" y="420" font-size="15" class="text">codex in /data/code/NeuroPlay</text>
+
+  <text x="674" y="460" font-size="16" class="cyan text" font-weight="800">Git</text>
+  <text x="674" y="486" font-size="15" class="label">State</text>
+  <text x="796" y="486" font-size="15" class="text">main @ d43063f (dirty, ahead 1)</text>
+  <text x="796" y="512" font-size="15" class="muted text">https://github.com/example/neuroplay</text>
+
+  <text x="674" y="552" font-size="16" class="cyan text" font-weight="800">Note</text>
+  <text x="674" y="578" font-size="15" class="text">Frontend is in ./web. Backend uses uv.</text>
+  <text x="674" y="604" font-size="15" class="muted text">Check worker pane before attaching.</text>
+
+  <rect x="48" y="696" width="1184" height="28" rx="6" fill="#161b22"/>
+  <text x="62" y="716" font-size="14" class="label">keys</text>
+  <text x="118" y="716" font-size="14" class="muted text">Enter attach | / search | n note | a archive | v view | s server | r rescan | q quit</text>
+</svg>
