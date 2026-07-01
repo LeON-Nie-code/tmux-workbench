@@ -18,6 +18,10 @@ back to work.
 ws
 ```
 
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="Tmux Workbench CLI and TUI demo" width="100%">
+</p>
+
 ## Why
 
 SSH plus tmux is resilient, but it does not remember enough when your work is
@@ -179,6 +183,10 @@ server:prod status:active tag:backend git:dirty
 
 Git filters include `dirty`, `clean`, `remote`, `ahead`, `behind`, branch text,
 commit text, and remote URL text.
+
+The demo GIF is recorded with [VHS](https://github.com/charmbracelet/vhs) from
+the real `ws` binary against a local fixture database. See
+[docs/demo/workbench.tape](docs/demo/workbench.tape).
 
 ## Configuration
 

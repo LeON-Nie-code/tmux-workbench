@@ -1,12 +1,27 @@
 # Demo
 
-This page is a placeholder for the first public demo.
+This page tracks demo assets for the first public release.
+
+## Current Assets
+
+- `docs/assets/demo.gif`
+- `docs/demo/workbench.tape`
+- `scripts/demo-fixture.sh`
+
+The GIF is generated with VHS from the real `ws` binary and a local fixture
+database. It does not use mocked screenshots.
+
+Regenerate it from the repository root:
+
+```bash
+cargo build --release
+PATH="$PWD/target/release:$PATH" vhs docs/demo/workbench.tape
+```
 
 Planned assets:
 
 - 20-30 second asciinema recording
-- short GIF for the README
-- screenshots for the TUI list and detail views
+- real terminal screenshots for the TUI list and detail views
 
 Suggested flow:
 
