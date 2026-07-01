@@ -82,7 +82,7 @@ fn draw_tui(
                 .map(|ws| {
                     ListItem::new(Line::from(vec![
                         Span::styled(
-                            format!("{:<22}", truncate(&ws.name, 22)),
+                            format!("{:<22}", truncate(display_name(ws), 22)),
                             Style::default().add_modifier(Modifier::BOLD),
                         ),
                         Span::raw(format!("{:<20}", truncate(&ws.server, 20))),
@@ -218,12 +218,14 @@ fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
         .collect();
     let mut lines = vec![
         Line::from(format!("Name: {}", ws.name)),
+        Line::from(format!("Alias: {}", ws.alias.as_deref().unwrap_or(""))),
         Line::from(format!("ID: {}", ws.id)),
         Line::from(format!("Server: {}", ws.server)),
         Line::from(format!("Session: {}", ws.session)),
         Line::from(format!("Path: {}", ws.root_path)),
         Line::from(format!("Agent: {}", ws.agent)),
         Line::from(format!("Status: {}", ws.status)),
+        Line::from(format!("Tags: {}", ws.tags.join(", "))),
         Line::from(format!("Last seen: {}", ws.last_seen)),
         Line::from(format!(
             "Last attached: {}",
@@ -248,6 +250,10 @@ fn workspace_list_title(show_archived: bool) -> String {
     }
 }
 
+fn display_name(ws: &Workspace) -> &str {
+    ws.alias.as_deref().unwrap_or(&ws.name)
+}
+
 fn filtered_indices(workspaces: &[Workspace], search: &str, show_archived: bool) -> Vec<usize> {
     let needle = search.trim().to_lowercase();
     workspaces
@@ -263,6 +269,7 @@ fn workspace_matches(ws: &Workspace, needle: &str) -> bool {
     [
         ws.id.as_str(),
         ws.name.as_str(),
+        ws.alias.as_deref().unwrap_or(""),
         ws.server.as_str(),
         ws.session.as_str(),
         ws.root_path.as_str(),
@@ -272,6 +279,10 @@ fn workspace_matches(ws: &Workspace, needle: &str) -> bool {
     ]
     .iter()
     .any(|value| value.to_lowercase().contains(needle))
+        || ws
+            .tags
+            .iter()
+            .any(|tag| tag.to_lowercase().contains(needle))
         || ws.panes.iter().any(|pane| {
             [
                 pane.window.as_str(),
@@ -352,6 +363,7 @@ mod tests {
         let workspace = Workspace {
             id: "server/demo".to_string(),
             name: "demo".to_string(),
+            alias: Some("demo-alias".to_string()),
             server: "server".to_string(),
             session: "demo".to_string(),
             root_path: "/data/code/demo".to_string(),
@@ -366,6 +378,7 @@ mod tests {
             }],
             note: "uses uv".to_string(),
             status: "active".to_string(),
+            tags: vec!["research".to_string()],
             last_seen: "now".to_string(),
             last_attached_at: None,
             attach_count: 0,
@@ -373,6 +386,8 @@ mod tests {
 
         assert!(workspace_matches(&workspace, "frontend"));
         assert!(workspace_matches(&workspace, "uv"));
+        assert!(workspace_matches(&workspace, "demo-alias"));
+        assert!(workspace_matches(&workspace, "research"));
         assert!(!workspace_matches(&workspace, "missing"));
     }
 
@@ -390,6 +405,7 @@ mod tests {
         Workspace {
             id: id.to_string(),
             name: id.to_string(),
+            alias: None,
             server: "server".to_string(),
             session: id.to_string(),
             root_path: "/tmp".to_string(),
@@ -397,6 +413,7 @@ mod tests {
             panes: Vec::new(),
             note: String::new(),
             status: status.to_string(),
+            tags: Vec::new(),
             last_seen: "now".to_string(),
             last_attached_at: None,
             attach_count: 0,

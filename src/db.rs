@@ -41,12 +41,14 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         create table if not exists workspaces (
           id text primary key,
           name text not null,
+          alias text,
           server text not null,
           session text not null,
           root_path text not null,
           agent text not null,
           note text not null default '',
           status text not null default 'active',
+          tags text not null default '',
           last_seen text not null,
           last_attached_at text,
           attach_count integer not null default 0
@@ -76,6 +78,18 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         "attach_count",
         "alter table workspaces add column attach_count integer not null default 0",
     )?;
+    add_column_if_missing(
+        conn,
+        "workspaces",
+        "alias",
+        "alter table workspaces add column alias text",
+    )?;
+    add_column_if_missing(
+        conn,
+        "workspaces",
+        "tags",
+        "alter table workspaces add column tags text not null default ''",
+    )?;
     Ok(())
 }
 
@@ -98,8 +112,8 @@ fn add_column_if_missing(
 
 pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
     conn.execute(
-        "insert into workspaces (id, name, server, session, root_path, agent, note, status, last_seen, last_attached_at, attach_count)
-         values (?1, ?2, ?3, ?4, ?5, ?6, coalesce((select note from workspaces where id = ?1), ''), coalesce((select status from workspaces where id = ?1), 'active'), ?7, (select last_attached_at from workspaces where id = ?1), coalesce((select attach_count from workspaces where id = ?1), 0))
+        "insert into workspaces (id, name, alias, server, session, root_path, agent, note, status, tags, last_seen, last_attached_at, attach_count)
+         values (?1, ?2, (select alias from workspaces where id = ?1), ?3, ?4, ?5, ?6, coalesce((select note from workspaces where id = ?1), ''), coalesce((select status from workspaces where id = ?1), 'active'), coalesce((select tags from workspaces where id = ?1), ''), ?7, (select last_attached_at from workspaces where id = ?1), coalesce((select attach_count from workspaces where id = ?1), 0))
          on conflict(id) do update set
            name = excluded.name,
            server = excluded.server,
@@ -138,22 +152,24 @@ pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
 
 pub fn load_workspaces(conn: &Connection) -> Result<Vec<Workspace>> {
     let mut stmt = conn.prepare(
-        "select id, name, server, session, root_path, agent, note, status, last_seen, last_attached_at, attach_count
+        "select id, name, alias, server, session, root_path, agent, note, status, tags, last_seen, last_attached_at, attach_count
          from workspaces order by coalesce(last_attached_at, last_seen) desc, name",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok(Workspace {
             id: row.get(0)?,
             name: row.get(1)?,
-            server: row.get(2)?,
-            session: row.get(3)?,
-            root_path: row.get(4)?,
-            agent: row.get(5)?,
-            note: row.get(6)?,
-            status: row.get(7)?,
-            last_seen: row.get(8)?,
-            last_attached_at: row.get(9)?,
-            attach_count: row.get(10)?,
+            alias: row.get(2)?,
+            server: row.get(3)?,
+            session: row.get(4)?,
+            root_path: row.get(5)?,
+            agent: row.get(6)?,
+            note: row.get(7)?,
+            status: row.get(8)?,
+            tags: parse_tags(&row.get::<_, String>(9)?),
+            last_seen: row.get(10)?,
+            last_attached_at: row.get(11)?,
+            attach_count: row.get(12)?,
             panes: Vec::new(),
         })
     })?;
@@ -170,7 +186,12 @@ pub fn load_workspaces(conn: &Connection) -> Result<Vec<Workspace>> {
 pub fn find_workspace(conn: &Connection, name: &str) -> Result<Option<Workspace>> {
     let matches: Vec<Workspace> = load_workspaces(conn)?
         .into_iter()
-        .filter(|ws| ws.id == name || ws.name == name || ws.session == name)
+        .filter(|ws| {
+            ws.id == name
+                || ws.name == name
+                || ws.session == name
+                || ws.alias.as_deref() == Some(name)
+        })
         .collect();
     if matches.len() > 1 {
         let ids = matches
@@ -218,6 +239,22 @@ pub fn set_status_by_id(conn: &Connection, id: &str, status: &str) -> Result<usi
     .map_err(Into::into)
 }
 
+pub fn set_alias_by_id(conn: &Connection, id: &str, alias: Option<&str>) -> Result<usize> {
+    conn.execute(
+        "update workspaces set alias = ?1 where id = ?2",
+        params![alias, id],
+    )
+    .map_err(Into::into)
+}
+
+pub fn set_tags_by_id(conn: &Connection, id: &str, tags: &[String]) -> Result<usize> {
+    conn.execute(
+        "update workspaces set tags = ?1 where id = ?2",
+        params![format_tags(tags), id],
+    )
+    .map_err(Into::into)
+}
+
 pub fn record_attach(conn: &Connection, id: &str) -> Result<()> {
     conn.execute(
         "update workspaces
@@ -227,4 +264,21 @@ pub fn record_attach(conn: &Connection, id: &str) -> Result<()> {
         params![Utc::now().to_rfc3339(), id],
     )?;
     Ok(())
+}
+
+fn parse_tags(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|tag| !tag.is_empty())
+        .map(ToString::to_string)
+        .collect()
+}
+
+fn format_tags(tags: &[String]) -> String {
+    tags.iter()
+        .map(|tag| tag.trim())
+        .filter(|tag| !tag.is_empty())
+        .collect::<Vec<_>>()
+        .join(",")
 }

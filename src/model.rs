@@ -12,10 +12,11 @@ pub struct ServerConfig {
     pub term: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Workspace {
     pub id: String,
     pub name: String,
+    pub alias: Option<String>,
     pub server: String,
     pub session: String,
     pub root_path: String,
@@ -23,12 +24,13 @@ pub struct Workspace {
     pub panes: Vec<Pane>,
     pub note: String,
     pub status: String,
+    pub tags: Vec<String>,
     pub last_seen: String,
     pub last_attached_at: Option<String>,
     pub attach_count: i64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Pane {
     pub window: String,
     pub pane: i64,

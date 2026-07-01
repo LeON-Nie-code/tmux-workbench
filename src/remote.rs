@@ -136,6 +136,7 @@ pub fn group_panes(server: &str, rows: Vec<(String, Pane)>) -> Vec<Workspace> {
             Some(Workspace {
                 id: format!("{server}/{}", session),
                 name: session.clone(),
+                alias: None,
                 server: server.to_string(),
                 session,
                 root_path: agent_pane.path.clone(),
@@ -143,6 +144,7 @@ pub fn group_panes(server: &str, rows: Vec<(String, Pane)>) -> Vec<Workspace> {
                 panes,
                 note: String::new(),
                 status: "active".to_string(),
+                tags: Vec::new(),
                 last_seen: Utc::now().to_rfc3339(),
                 last_attached_at: None,
                 attach_count: 0,

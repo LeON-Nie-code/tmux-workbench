@@ -57,6 +57,15 @@ List indexed workspaces:
 cargo run -- list
 ```
 
+Filter or export indexed workspaces:
+
+```bash
+cargo run -- list --server AI-Teacher-Baidu
+cargo run -- list --status active
+cargo run -- list --all
+cargo run -- list --json
+```
+
 Attach to a workspace:
 
 ```bash
@@ -85,6 +94,13 @@ Add a note:
 
 ```bash
 cargo run -- note AI-Teacher-Baidu/NeuroPlay "Frontend is in frontend; backend uses uv."
+```
+
+Set a display alias and tags:
+
+```bash
+cargo run -- alias AI-Teacher-Baidu/NeuroPlay neuro
+cargo run -- tags AI-Teacher-Baidu/NeuroPlay research frontend
 ```
 
 Open the TUI:
@@ -146,6 +162,7 @@ Implemented:
 - list workspaces
 - attach by workspace ID
 - notes and status
+- aliases and tags
 - basic TUI with search
 - edit notes from the TUI
 - attach history and recent-first sorting
@@ -156,9 +173,11 @@ Implemented:
 - config editing from CLI
 - archive/unarchive from the TUI
 - rescan from the TUI
+- scriptable list filters and JSON output
 
 Next:
 
 - pane layout restore
-- richer workspace notes and todos
+- `.ws.md` note sync
+- richer workspace todos
 - installable binary release
