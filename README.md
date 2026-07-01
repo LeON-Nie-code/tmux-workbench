@@ -123,6 +123,19 @@ Local index:
 ~/.local/share/ws/workspaces.db
 ```
 
+## Code Structure
+
+```text
+src/main.rs      CLI routing
+src/model.rs     shared data types
+src/config.rs    config paths and defaults
+src/db.rs        SQLite schema and queries
+src/remote.rs    SSH and tmux integration
+src/commands.rs  command implementations
+src/tui.rs       terminal UI
+src/util.rs      shell/editor helpers
+```
+
 ## MVP Scope
 
 Implemented:
