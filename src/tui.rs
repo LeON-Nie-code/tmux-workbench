@@ -198,10 +198,10 @@ fn draw_tui(
                 .highlight_style(
                     Style::default()
                         .fg(Color::Black)
-                        .bg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
+                        .bg(Color::Rgb(94, 234, 212))
+                        .add_modifier(Modifier::BOLD | Modifier::REVERSED),
                 )
-                .highlight_symbol("> ");
+                .highlight_symbol("▌ ");
             frame.render_stateful_widget(list, left[1], &mut state);
 
             let lines = if let Some(selected) = state.selected() {
@@ -401,25 +401,25 @@ fn app_header(
                 " ws ",
                 Style::default()
                     .fg(Color::Black)
-                    .bg(Color::Cyan)
+                    .bg(Color::Rgb(94, 234, 212))
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw("  "),
             Span::styled(
                 "Tmux Workbench",
                 Style::default()
-                    .fg(Color::White)
+                    .fg(Color::Rgb(226, 232, 240))
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw("  "),
             Span::styled(
                 format!("{} shown / {} total", filtered_count, total),
-                Style::default().fg(Color::Gray),
+                Style::default().fg(Color::Rgb(148, 163, 184)),
             ),
             Span::raw("  "),
             Span::styled(
                 format!("{} active", active),
-                Style::default().fg(Color::Green),
+                Style::default().fg(Color::Rgb(134, 239, 172)),
             ),
             Span::raw("  "),
             Span::styled(format!("{} missing", missing), presence_style("missing")),
@@ -437,7 +437,7 @@ fn app_header(
             Span::styled(scan_status.to_string(), scan_style(scan_status)),
         ]),
     ])
-    .block(Block::default().style(Style::default().bg(Color::Black)))
+    .block(Block::default().style(Style::default().bg(Color::Rgb(15, 23, 42))))
 }
 
 fn footer(mode: InputMode, view: WorkspaceView) -> Paragraph<'static> {
@@ -448,10 +448,13 @@ fn footer(mode: InputMode, view: WorkspaceView) -> Paragraph<'static> {
     Paragraph::new(Line::from(vec![
         Span::styled(
             " keys ",
-            Style::default().fg(Color::Black).bg(Color::DarkGray),
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Rgb(94, 234, 212))
+                .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" "),
-        Span::styled(text, Style::default().fg(Color::Gray)),
+        Span::styled(text, Style::default().fg(Color::Rgb(148, 163, 184))),
     ]))
 }
 
@@ -460,12 +463,12 @@ fn panel_block(title: impl Into<String>) -> Block<'static> {
         .title(Span::styled(
             format!(" {} ", title.into()),
             Style::default()
-                .fg(Color::Cyan)
+                .fg(Color::Rgb(125, 211, 252))
                 .add_modifier(Modifier::BOLD),
         ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(Color::DarkGray))
+        .border_style(Style::default().fg(Color::Rgb(71, 85, 105)))
 }
 
 fn inner(area: Rect) -> Rect {
@@ -488,9 +491,9 @@ fn list_header() -> Paragraph<'static> {
 
 fn workspace_list_item(ws: &Workspace) -> ListItem<'static> {
     let base_style = if ws.status == "archived" {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(Color::Rgb(100, 116, 139))
     } else {
-        Style::default().fg(Color::White)
+        Style::default().fg(Color::Rgb(226, 232, 240))
     };
     ListItem::new(Line::from(vec![
         Span::styled(
@@ -499,11 +502,11 @@ fn workspace_list_item(ws: &Workspace) -> ListItem<'static> {
         ),
         Span::styled(
             format!("{:<20}", truncate(&ws.server, 20)),
-            Style::default().fg(Color::Gray),
+            Style::default().fg(Color::Rgb(148, 163, 184)),
         ),
         Span::styled(
             format!("{:<8}", truncate(&ws.agent, 8)),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(Color::Rgb(253, 224, 71)),
         ),
         Span::styled(
             format!("{:<12}", truncate(&workspace_state(ws), 12)),
@@ -513,16 +516,22 @@ fn workspace_list_item(ws: &Workspace) -> ListItem<'static> {
 }
 
 fn label_span(label: &str) -> Span<'static> {
-    Span::styled(format!(" {} ", label), Style::default().fg(Color::DarkGray))
+    Span::styled(
+        format!(" {} ", label),
+        Style::default().fg(Color::Rgb(100, 116, 139)),
+    )
 }
 
 fn value_span(value: &str) -> Span<'static> {
-    Span::styled(format!("{}  ", value), Style::default().fg(Color::White))
+    Span::styled(
+        format!("{}  ", value),
+        Style::default().fg(Color::Rgb(226, 232, 240)),
+    )
 }
 
 fn header_style() -> Style {
     Style::default()
-        .fg(Color::DarkGray)
+        .fg(Color::Rgb(100, 116, 139))
         .add_modifier(Modifier::BOLD)
 }
 
@@ -531,27 +540,27 @@ fn status_style(ws: &Workspace) -> Style {
         return presence_style(&ws.presence);
     }
     match ws.status.as_str() {
-        "archived" => Style::default().fg(Color::DarkGray),
-        "active" => Style::default().fg(Color::Green),
-        _ => Style::default().fg(Color::Yellow),
+        "archived" => Style::default().fg(Color::Rgb(100, 116, 139)),
+        "active" => Style::default().fg(Color::Rgb(134, 239, 172)),
+        _ => Style::default().fg(Color::Rgb(253, 224, 71)),
     }
 }
 
 fn presence_style(presence: &str) -> Style {
     match presence {
-        "seen" => Style::default().fg(Color::Green),
-        "missing" => Style::default().fg(Color::Red),
-        _ => Style::default().fg(Color::Yellow),
+        "seen" => Style::default().fg(Color::Rgb(134, 239, 172)),
+        "missing" => Style::default().fg(Color::Rgb(248, 113, 113)),
+        _ => Style::default().fg(Color::Rgb(253, 224, 71)),
     }
 }
 
 fn scan_style(scan_status: &str) -> Style {
     if scan_status.contains("failed") || scan_status.contains("error") {
-        Style::default().fg(Color::Red)
+        Style::default().fg(Color::Rgb(248, 113, 113))
     } else if scan_status.contains("refreshing") {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(Color::Rgb(253, 224, 71))
     } else {
-        Style::default().fg(Color::Green)
+        Style::default().fg(Color::Rgb(134, 239, 172))
     }
 }
 
@@ -670,21 +679,27 @@ fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
         .map(|pane| {
             let marker = if pane.active { "*" } else { " " };
             Line::from(vec![
-                Span::styled(format!("{:<1} ", marker), Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    format!("{:<1} ", marker),
+                    Style::default().fg(Color::Rgb(125, 211, 252)),
+                ),
                 Span::styled(
                     format!("{:<14}", truncate(&pane.window, 14)),
-                    Style::default().fg(Color::White),
+                    Style::default().fg(Color::Rgb(226, 232, 240)),
                 ),
                 Span::raw(" "),
                 Span::styled(
                     format!("{:<4}", pane.pane),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(Color::Rgb(100, 116, 139)),
                 ),
                 Span::styled(
                     format!("{:<10}", truncate(&pane.command, 10)),
-                    Style::default().fg(Color::Yellow),
+                    Style::default().fg(Color::Rgb(253, 224, 71)),
                 ),
-                Span::styled(pane.path.clone(), Style::default().fg(Color::Gray)),
+                Span::styled(
+                    pane.path.clone(),
+                    Style::default().fg(Color::Rgb(148, 163, 184)),
+                ),
             ])
         })
         .collect();
@@ -734,7 +749,7 @@ fn section_line(title: &str) -> Line<'static> {
     Line::from(Span::styled(
         title.to_string(),
         Style::default()
-            .fg(Color::Cyan)
+            .fg(Color::Rgb(125, 211, 252))
             .add_modifier(Modifier::BOLD),
     ))
 }
@@ -743,9 +758,12 @@ fn field_line(label: &str, value: &str) -> Line<'static> {
     Line::from(vec![
         Span::styled(
             format!("{:<15}", label),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(Color::Rgb(100, 116, 139)),
         ),
-        Span::styled(value.to_string(), Style::default().fg(Color::White)),
+        Span::styled(
+            value.to_string(),
+            Style::default().fg(Color::Rgb(226, 232, 240)),
+        ),
     ])
 }
 
@@ -766,7 +784,7 @@ fn note_lines(note: &str) -> Vec<Line<'static>> {
     lines.extend(note.lines().map(|line| {
         Line::from(Span::styled(
             format!("  {line}"),
-            Style::default().fg(Color::White),
+            Style::default().fg(Color::Rgb(226, 232, 240)),
         ))
     }));
     if note.ends_with('\n') {

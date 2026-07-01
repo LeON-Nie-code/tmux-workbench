@@ -11,6 +11,10 @@ This page tracks demo assets for the first public release.
 The GIF is generated with VHS from the real `ws` binary and a local fixture
 database. It does not use mocked screenshots.
 
+The tape unsets `NO_COLOR` before launching `ws`. Keep that line in place:
+without it, crossterm correctly disables ANSI colors and the GIF becomes a
+flat grayscale recording.
+
 Regenerate it from the repository root:
 
 ```bash
