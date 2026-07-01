@@ -718,7 +718,7 @@ fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
         Line::from(vec![
             Span::styled("A ", header_style()),
             Span::styled(format!("{:<14} ", "WINDOW"), header_style()),
-            Span::styled(format!("{:<4}", "PANE"), header_style()),
+            Span::styled(format!("{:<5}", "PANE"), header_style()),
             Span::styled(format!("{:<10}", "CMD"), header_style()),
             Span::styled("PATH", header_style()),
         ]),
@@ -742,7 +742,7 @@ fn section_line(title: &str) -> Line<'static> {
 fn field_line(label: &str, value: &str) -> Line<'static> {
     Line::from(vec![
         Span::styled(
-            format!("{:<13}", label),
+            format!("{:<15}", label),
             Style::default().fg(Color::DarkGray),
         ),
         Span::styled(value.to_string(), Style::default().fg(Color::White)),

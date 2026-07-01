@@ -1,9 +1,11 @@
 Output docs/assets/demo.gif
 Set Shell "bash"
-Set FontFamily "JetBrains Mono"
-Set FontSize 18
-Set Width 1100
-Set Height 720
+Set FontFamily "JetBrainsMono Nerd Font"
+Set FontSize 16
+Set LetterSpacing 0
+Set LineHeight 1.15
+Set Width 1500
+Set Height 900
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 25ms
 
@@ -41,13 +43,6 @@ Sleep 300ms
 Type "ws list --server prod --status active"
 Enter
 Sleep 2000ms
-Type "clear"
-Enter
-Sleep 300ms
-
-Type "ws list --json"
-Enter
-Sleep 2200ms
 Type "clear"
 Enter
 Sleep 300ms
