@@ -1,5 +1,7 @@
 use std::{
     io::{self, Stdout},
+    sync::mpsc::{self, Receiver, Sender},
+    thread,
     time::{Duration, Instant},
 };
 
@@ -15,7 +17,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 use rusqlite::params;
 
@@ -27,6 +29,8 @@ use crate::{
 };
 
 const AUTO_REFRESH_INTERVAL: Duration = Duration::from_secs(30);
+
+type RefreshResult = std::result::Result<Vec<Workspace>, String>;
 
 pub fn run_tui() -> Result<()> {
     let workspaces = load_indexed_workspaces()?;
@@ -97,20 +101,22 @@ fn draw_tui(
     let mut mode = InputMode::Normal;
     let mut show_archived = false;
     let mut last_auto_refresh = Instant::now();
+    let mut auto_refresh_in_flight = false;
+    let (refresh_tx, refresh_rx) = mpsc::channel();
 
     loop {
-        if last_auto_refresh.elapsed() >= AUTO_REFRESH_INTERVAL {
-            let selected_id = selected_workspace_id(&workspaces, &state, &search, show_archived);
-            if refresh_index().is_ok() {
-                workspaces = load_indexed_workspaces()?;
-                restore_selection(
-                    &workspaces,
-                    &mut state,
-                    selected_id.as_deref(),
-                    &search,
-                    show_archived,
-                );
-            }
+        apply_completed_refresh(
+            &refresh_rx,
+            &mut auto_refresh_in_flight,
+            &mut workspaces,
+            &mut state,
+            &search,
+            show_archived,
+        );
+
+        if last_auto_refresh.elapsed() >= AUTO_REFRESH_INTERVAL && !auto_refresh_in_flight {
+            spawn_auto_refresh(refresh_tx.clone());
+            auto_refresh_in_flight = true;
             last_auto_refresh = Instant::now();
         }
 
@@ -167,8 +173,9 @@ fn draw_tui(
                 InputMode::Search => "Type to search  Enter accept  Esc clear",
             }));
 
-            let detail =
-                Paragraph::new(lines).block(Block::default().title("Detail").borders(Borders::ALL));
+            let detail = Paragraph::new(lines)
+                .block(Block::default().title("Detail").borders(Borders::ALL))
+                .wrap(Wrap { trim: false });
             frame.render_widget(detail, chunks[1]);
         })?;
 
@@ -261,6 +268,39 @@ fn draw_tui(
     Ok(())
 }
 
+fn apply_completed_refresh(
+    refresh_rx: &Receiver<RefreshResult>,
+    auto_refresh_in_flight: &mut bool,
+    workspaces: &mut Vec<Workspace>,
+    state: &mut ListState,
+    search: &str,
+    show_archived: bool,
+) {
+    while let Ok(result) = refresh_rx.try_recv() {
+        *auto_refresh_in_flight = false;
+        if let Ok(next_workspaces) = result {
+            let selected_id = selected_workspace_id(&workspaces, &state, &search, show_archived);
+            *workspaces = next_workspaces;
+            restore_selection(
+                workspaces,
+                state,
+                selected_id.as_deref(),
+                search,
+                show_archived,
+            );
+        }
+    }
+}
+
+fn spawn_auto_refresh(refresh_tx: Sender<RefreshResult>) {
+    thread::spawn(move || {
+        let result = refresh_index()
+            .and_then(|_| load_indexed_workspaces())
+            .map_err(|err| format!("{err:#}"));
+        let _ = refresh_tx.send(result);
+    });
+}
+
 #[derive(Debug, Clone, Copy)]
 enum InputMode {
     Normal,
@@ -305,7 +345,20 @@ fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
     ];
     lines.extend(pane_lines);
     lines.push(Line::from(""));
-    lines.push(Line::from(format!("Note: {}", ws.note)));
+    lines.extend(note_lines(&ws.note));
+    lines
+}
+
+fn note_lines(note: &str) -> Vec<Line<'static>> {
+    if note.is_empty() {
+        return vec![Line::from("Note:")];
+    }
+
+    let mut lines = vec![Line::from("Note:")];
+    lines.extend(note.lines().map(|line| Line::from(format!("  {line}"))));
+    if note.ends_with('\n') {
+        lines.push(Line::from("  "));
+    }
     lines
 }
 
@@ -437,7 +490,7 @@ fn rescan_from_tui(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<
 mod tests {
     use crate::model::{Pane, Workspace};
 
-    use super::{filtered_indices, workspace_matches};
+    use super::{filtered_indices, note_lines, workspace_matches};
 
     #[test]
     fn search_matches_workspace_metadata_and_panes() {
@@ -481,6 +534,16 @@ mod tests {
 
         assert_eq!(filtered_indices(&workspaces, "", false), vec![0]);
         assert_eq!(filtered_indices(&workspaces, "", true), vec![0, 1]);
+    }
+
+    #[test]
+    fn note_lines_preserve_newlines() {
+        let lines = note_lines("first\n\nsecond");
+        assert_eq!(lines.len(), 4);
+        assert_eq!(lines[0].to_string(), "Note:");
+        assert_eq!(lines[1].to_string(), "  first");
+        assert_eq!(lines[2].to_string(), "  ");
+        assert_eq!(lines[3].to_string(), "  second");
     }
 
     fn test_workspace(id: &str, status: &str) -> Workspace {
