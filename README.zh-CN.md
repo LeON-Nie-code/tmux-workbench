@@ -58,16 +58,16 @@ curl -fsSL https://raw.githubusercontent.com/LeON-Nie-code/tmux-workbench/master
 
 ### Homebrew
 
-```bash
-brew tap LeON-Nie-code/tmux-workbench
-brew install ws
-```
-
-本地开发测试：
+可以从当前仓库作为 Homebrew tap 安装。Homebrew 6 对自定义 tap 需要先显式
+trust：
 
 ```bash
-brew install --build-from-source ./Formula/ws.rb
+brew tap LeON-Nie-code/tmux-workbench https://github.com/LeON-Nie-code/tmux-workbench
+brew trust LeON-Nie-code/tmux-workbench
+brew install LeON-Nie-code/tmux-workbench/ws
 ```
+
+如果只是想安装二进制，更推荐使用上面的安装脚本。
 
 ### Cargo
 

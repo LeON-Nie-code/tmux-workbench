@@ -68,18 +68,16 @@ The script installs `ws` into `~/.local/bin` by default. Set
 
 ### Homebrew
 
-After tapping the repository:
+Homebrew support is available from this repository tap. Homebrew 6 requires
+trusting custom taps before loading their formulae:
 
 ```bash
-brew tap LeON-Nie-code/tmux-workbench
-brew install ws
+brew tap LeON-Nie-code/tmux-workbench https://github.com/LeON-Nie-code/tmux-workbench
+brew trust LeON-Nie-code/tmux-workbench
+brew install LeON-Nie-code/tmux-workbench/ws
 ```
 
-For local testing from a checkout:
-
-```bash
-brew install --build-from-source ./Formula/ws.rb
-```
+The install script above is the recommended path if you only want the binary.
 
 ### Cargo
 
