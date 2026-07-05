@@ -12,5 +12,6 @@ configuration format settle.
 - Add server management commands.
 - Add notes, aliases, tags, archive status, and attach history.
 - Add git snapshots for branch, commit, dirty state, ahead/behind, and remote.
+- Add AI agent context indexing for files such as `AGENTS.md` and `CLAUDE.md`.
 - Add concurrent scan with command timeouts.
 - Add TUI scan status, server filtering, structured search, and view modes.

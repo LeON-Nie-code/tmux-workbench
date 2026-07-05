@@ -32,6 +32,14 @@ pub struct Workspace {
     pub last_attached_at: Option<String>,
     pub attach_count: i64,
     pub git: Option<GitInfo>,
+    pub agent_context: Vec<AgentContextFile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentContextFile {
+    pub path: String,
+    pub title: String,
+    pub preview: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -5,7 +5,7 @@
 Tmux Workbench 是一个面向本机和远程 tmux session 的终端工作区记忆工具。
 
 它会索引你在不同机器和 SSH 服务器上的 tmux workspace，记录项目路径、pane、
-git 状态、备注、标签和进入历史，让你用一个简短命令回到完整工作现场：
+git 状态、AI agent 初始化文档、备注、标签和进入历史，让你用一个简短命令回到完整工作现场：
 
 ```bash
 ws
@@ -24,6 +24,7 @@ SSH + tmux 很稳定，但当项目和服务器变多以后，你需要记住太
 - 该从哪个路径继续
 - 哪个 pane 正在跑 agent / shell
 - git 当前是什么分支，是否 dirty
+- 项目里有没有 `AGENTS.md`、`CLAUDE.md` 这类 agent 初始化文档
 - 上次给这个 workspace 留了什么备注
 
 Tmux Workbench 不替代 tmux。它是在 tmux 之上增加一层本地“项目记忆”。
@@ -37,6 +38,7 @@ Tmux Workbench 不替代 tmux。它是在 tmux 之上增加一层本地“项目
 - scan 时保留 notes、alias、tags、status 和 attach history。
 - 单独记录 missing session，不覆盖用户手动 archive 的状态。
 - 记录 git branch、commit、dirty、ahead/behind 和 remote URL。
+- 检测 workspace root 下的 AI agent context 文件。
 - 后台刷新，不阻塞 TUI 操作。
 - 所有状态都保存在本地 SQLite。
 
@@ -127,6 +129,7 @@ ws list --all
 ws list --json
 
 ws attach prod/api
+ws agent prod/api
 ws recreate prod/api
 
 ws note prod/api "Backend uses uv. Frontend is in ./web."

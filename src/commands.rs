@@ -96,14 +96,15 @@ pub fn list_workspaces(args: &ListArgs) -> Result<()> {
             format!(" [{}]", ws.tags.join(","))
         };
         println!(
-            "{:<44} {:<22} {:<8} {:<8} {}{}{}",
+            "{:<44} {:<22} {:<8} {:<8} {}{}{}{}",
             ws.id,
             truncate(name, 22),
             ws.agent,
             workspace_state(&ws),
             ws.root_path,
             git_summary(&ws),
-            tags
+            tags,
+            agent_context_summary(&ws)
         );
     }
     Ok(())
@@ -197,6 +198,20 @@ fn git_summary(ws: &crate::model::Workspace) -> String {
     }
 }
 
+fn agent_context_summary(ws: &crate::model::Workspace) -> String {
+    if ws.agent_context.is_empty() {
+        String::new()
+    } else {
+        let files = ws
+            .agent_context
+            .iter()
+            .map(|file| file.path.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        format!(" <agent:{files}>")
+    }
+}
+
 fn filtered_workspaces(
     workspaces: Vec<crate::model::Workspace>,
     args: &ListArgs,
@@ -257,6 +272,31 @@ pub fn attach(name: &str) -> Result<()> {
         .stderr(Stdio::inherit())
         .status()
         .context("failed to run attach command")?;
+    Ok(())
+}
+
+pub fn list_agent_context(name: &str) -> Result<()> {
+    let conn = open_db()?;
+    migrate(&conn)?;
+    let ws =
+        find_workspace(&conn, name)?.with_context(|| format!("workspace not found: {name}"))?;
+
+    if ws.agent_context.is_empty() {
+        println!("No agent context files indexed for {}", ws.id);
+        println!("Run `ws scan` after adding AGENTS.md, CLAUDE.md, or another supported file.");
+        return Ok(());
+    }
+
+    println!("{} agent context", ws.id);
+    for file in ws.agent_context {
+        println!();
+        println!("== {} ==", file.path);
+        if !file.title.trim().is_empty() {
+            println!("{}", file.title.trim());
+            println!();
+        }
+        println!("{}", file.preview.trim());
+    }
     Ok(())
 }
 

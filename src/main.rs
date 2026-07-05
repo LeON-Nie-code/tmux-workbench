@@ -10,8 +10,8 @@ mod tui;
 mod util;
 
 use commands::{
-    add_server_command, attach, doctor, list_servers, list_workspaces, open_config, recreate,
-    remove_server_command, scan, set_alias, set_note, set_status, set_tags,
+    add_server_command, attach, doctor, list_agent_context, list_servers, list_workspaces,
+    open_config, recreate, remove_server_command, scan, set_alias, set_note, set_status, set_tags,
 };
 use config::init_config;
 use tui::run_tui;
@@ -31,6 +31,9 @@ enum Commands {
     List(ListArgs),
     OpenConfig,
     Attach {
+        workspace: String,
+    },
+    Agent {
         workspace: String,
     },
     Recreate {
@@ -91,6 +94,7 @@ fn main() -> Result<()> {
         Some(Commands::List(args)) => list_workspaces(&args),
         Some(Commands::OpenConfig) => open_config(),
         Some(Commands::Attach { workspace }) => attach(&workspace),
+        Some(Commands::Agent { workspace }) => list_agent_context(&workspace),
         Some(Commands::Recreate { workspace }) => recreate(&workspace),
         Some(Commands::Note { workspace, note }) => set_note(&workspace, &note),
         Some(Commands::Status { workspace, status }) => set_status(&workspace, &status),

@@ -4,7 +4,7 @@ use rusqlite::{Connection, params};
 
 use crate::{
     config::data_path,
-    model::{GitInfo, Pane, Workspace},
+    model::{AgentContextFile, GitInfo, Pane, Workspace},
     util::shell_quote,
 };
 
@@ -58,7 +58,8 @@ pub fn migrate(conn: &Connection) -> Result<()> {
           git_remote text,
           git_dirty integer,
           git_ahead integer,
-          git_behind integer
+          git_behind integer,
+          agent_context text not null default '[]'
         );
 
         create table if not exists panes (
@@ -139,7 +140,13 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         "git_behind",
         "alter table workspaces add column git_behind integer",
     )?;
-    conn.pragma_update(None, "user_version", 1)?;
+    add_column_if_missing(
+        conn,
+        "workspaces",
+        "agent_context",
+        "alter table workspaces add column agent_context text not null default '[]'",
+    )?;
+    conn.pragma_update(None, "user_version", 2)?;
     Ok(())
 }
 
@@ -161,9 +168,10 @@ fn add_column_if_missing(
 }
 
 pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
+    let agent_context = serde_json::to_string(&ws.agent_context)?;
     conn.execute(
-        "insert into workspaces (id, name, alias, server, session, root_path, agent, note, status, presence, tags, last_seen, last_attached_at, attach_count, git_branch, git_head, git_remote, git_dirty, git_ahead, git_behind)
-         values (?1, ?2, (select alias from workspaces where id = ?1), ?3, ?4, ?5, ?6, coalesce((select note from workspaces where id = ?1), ''), coalesce((select status from workspaces where id = ?1), 'active'), 'seen', coalesce((select tags from workspaces where id = ?1), ''), ?7, (select last_attached_at from workspaces where id = ?1), coalesce((select attach_count from workspaces where id = ?1), 0), ?8, ?9, ?10, ?11, ?12, ?13)
+        "insert into workspaces (id, name, alias, server, session, root_path, agent, note, status, presence, tags, last_seen, last_attached_at, attach_count, git_branch, git_head, git_remote, git_dirty, git_ahead, git_behind, agent_context)
+         values (?1, ?2, (select alias from workspaces where id = ?1), ?3, ?4, ?5, ?6, coalesce((select note from workspaces where id = ?1), ''), coalesce((select status from workspaces where id = ?1), 'active'), 'seen', coalesce((select tags from workspaces where id = ?1), ''), ?7, (select last_attached_at from workspaces where id = ?1), coalesce((select attach_count from workspaces where id = ?1), 0), ?8, ?9, ?10, ?11, ?12, ?13, ?14)
          on conflict(id) do update set
            name = excluded.name,
            server = excluded.server,
@@ -183,7 +191,8 @@ pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
            git_remote = excluded.git_remote,
            git_dirty = excluded.git_dirty,
            git_ahead = excluded.git_ahead,
-           git_behind = excluded.git_behind",
+           git_behind = excluded.git_behind,
+           agent_context = excluded.agent_context",
         params![
             ws.id,
             ws.name,
@@ -198,6 +207,7 @@ pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
             ws.git.as_ref().map(|git| git.dirty as i64),
             ws.git.as_ref().map(|git| git.ahead),
             ws.git.as_ref().map(|git| git.behind),
+            agent_context,
         ],
     )?;
     conn.execute("delete from panes where workspace_id = ?1", params![ws.id])?;
@@ -221,10 +231,11 @@ pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
 
 pub fn load_workspaces(conn: &Connection) -> Result<Vec<Workspace>> {
     let mut stmt = conn.prepare(
-        "select id, name, alias, server, session, root_path, agent, note, status, presence, tags, last_seen, last_attached_at, attach_count, git_branch, git_head, git_remote, git_dirty, git_ahead, git_behind
+        "select id, name, alias, server, session, root_path, agent, note, status, presence, tags, last_seen, last_attached_at, attach_count, git_branch, git_head, git_remote, git_dirty, git_ahead, git_behind, agent_context
          from workspaces order by coalesce(last_attached_at, last_seen) desc, name",
     )?;
     let rows = stmt.query_map([], |row| {
+        let agent_context_json: String = row.get(20)?;
         Ok(Workspace {
             id: row.get(0)?,
             name: row.get(1)?,
@@ -248,6 +259,7 @@ pub fn load_workspaces(conn: &Connection) -> Result<Vec<Workspace>> {
                 row.get(18)?,
                 row.get(19)?,
             ),
+            agent_context: parse_agent_context(&agent_context_json),
             panes: Vec::new(),
         })
     })?;
@@ -294,6 +306,10 @@ fn git_info_from_row(
         ahead: ahead.unwrap_or(0),
         behind: behind.unwrap_or(0),
     })
+}
+
+fn parse_agent_context(value: &str) -> Vec<AgentContextFile> {
+    serde_json::from_str(value).unwrap_or_default()
 }
 
 pub fn find_workspace(conn: &Connection, name: &str) -> Result<Option<Workspace>> {
@@ -402,7 +418,7 @@ mod tests {
         load_workspaces, migrate, record_attach, set_alias_by_id, set_note_by_id, set_status_by_id,
         set_tags_by_id, upsert_workspace,
     };
-    use crate::model::{Pane, Workspace};
+    use crate::model::{AgentContextFile, Pane, Workspace};
 
     #[test]
     fn upsert_preserves_user_metadata_and_attach_history() {
@@ -429,6 +445,7 @@ mod tests {
         assert!(workspace.last_attached_at.is_some());
         assert_eq!(workspace.attach_count, 1);
         assert_eq!(workspace.root_path, "/repo/subdir");
+        assert_eq!(workspace.agent_context[0].path, "CLAUDE.md");
     }
 
     fn test_workspace(root_path: &str) -> Workspace {
@@ -456,6 +473,11 @@ mod tests {
             last_attached_at: None,
             attach_count: 0,
             git: None,
+            agent_context: vec![AgentContextFile {
+                path: "CLAUDE.md".to_string(),
+                title: "Project instructions".to_string(),
+                preview: "Run cargo test before submitting.".to_string(),
+            }],
         }
     }
 }

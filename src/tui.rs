@@ -714,6 +714,7 @@ fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
         Line::from(""),
         section_line("Runtime"),
         field_line("Agent", &ws.agent),
+        field_line("Agent docs", &agent_context_detail(ws)),
         field_line("Panes", &ws.panes.len().to_string()),
         field_line("Active", &active_command),
         field_line("Status", &workspace_state(ws)),
@@ -772,6 +773,18 @@ fn tags_detail(ws: &Workspace) -> String {
         "-".to_string()
     } else {
         ws.tags.join(", ")
+    }
+}
+
+fn agent_context_detail(ws: &Workspace) -> String {
+    if ws.agent_context.is_empty() {
+        "-".to_string()
+    } else {
+        ws.agent_context
+            .iter()
+            .map(|file| file.path.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }
 
@@ -921,6 +934,15 @@ fn workspace_matches(ws: &Workspace, needle: &str) -> bool {
             .tags
             .iter()
             .any(|tag| tag.to_lowercase().contains(needle))
+        || ws.agent_context.iter().any(|file| {
+            [
+                file.path.as_str(),
+                file.title.as_str(),
+                file.preview.as_str(),
+            ]
+            .iter()
+            .any(|value| value.to_lowercase().contains(needle))
+        })
         || ws.panes.iter().any(|pane| {
             [
                 pane.window.as_str(),
@@ -1037,7 +1059,7 @@ fn rescan_from_tui(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use crate::model::{Pane, Workspace};
+    use crate::model::{AgentContextFile, Pane, Workspace};
 
     use super::{SearchQuery, WorkspaceView, filtered_indices, note_lines, workspace_matches};
 
@@ -1067,12 +1089,19 @@ mod tests {
             last_attached_at: None,
             attach_count: 0,
             git: None,
+            agent_context: vec![AgentContextFile {
+                path: "AGENTS.md".to_string(),
+                title: "Agent guide".to_string(),
+                preview: "Use frontend workspace".to_string(),
+            }],
         };
 
         assert!(workspace_matches(&workspace, "frontend"));
         assert!(workspace_matches(&workspace, "uv"));
         assert!(workspace_matches(&workspace, "demo-alias"));
         assert!(workspace_matches(&workspace, "research"));
+        assert!(workspace_matches(&workspace, "AGENTS.md"));
+        assert!(workspace_matches(&workspace, "frontend workspace"));
         assert!(!workspace_matches(&workspace, "missing"));
 
         assert!(SearchQuery::parse("server:serv status:active tag:research").matches(&workspace));
@@ -1130,6 +1159,7 @@ mod tests {
             last_attached_at: None,
             attach_count: 0,
             git: None,
+            agent_context: Vec::new(),
         }
     }
 }

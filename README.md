@@ -32,6 +32,7 @@ memory layer above tmux:
 - tmux session and pane snapshot
 - project path and active command
 - git branch, commit, dirty state, ahead/behind counts, and remote URL
+- AI agent instruction files such as `AGENTS.md` and `CLAUDE.md`
 - notes, aliases, tags, archive status, and attach history
 
 It does not replace tmux. It makes tmux workspaces easier to find, inspect, and
@@ -46,6 +47,7 @@ resume.
 - Preserve notes, aliases, tags, status, and attach history across scans.
 - Detect missing tmux sessions without overwriting archive state.
 - Capture git repository state for each workspace.
+- Detect AI agent context files in each workspace root.
 - Refresh in the background without blocking the TUI.
 - Store state locally in SQLite.
 
@@ -138,6 +140,7 @@ ws list --all
 ws list --json
 
 ws attach prod/api
+ws agent prod/api
 ws recreate prod/api
 
 ws note prod/api "Backend uses uv. Frontend is in ./web."

@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use chrono::Utc;
 
 use crate::{
-    model::{DoctorReport, GitInfo, Pane, ServerConfig, Workspace},
+    model::{AgentContextFile, DoctorReport, GitInfo, Pane, ServerConfig, Workspace},
     util::shell_quote,
 };
 
@@ -32,6 +32,8 @@ pub fn scan_server(server: &ServerConfig) -> Result<Vec<Workspace>> {
     let mut workspaces = group_panes(&server.name, panes);
     for workspace in &mut workspaces {
         workspace.git = scan_git(server, &workspace.root_path).ok().flatten();
+        workspace.agent_context =
+            scan_agent_context(server, &workspace.root_path).unwrap_or_default();
     }
     Ok(workspaces)
 }
@@ -191,9 +193,61 @@ fn group_panes(server: &str, rows: Vec<(String, Pane)>) -> Vec<Workspace> {
                 last_attached_at: None,
                 attach_count: 0,
                 git: None,
+                agent_context: Vec::new(),
             })
         })
         .collect()
+}
+
+fn scan_agent_context(server: &ServerConfig, path: &str) -> Result<Vec<AgentContextFile>> {
+    let command = format!(
+        "cd {} 2>/dev/null || exit 0; for file in AGENTS.md AGENT.md CLAUDE.md GEMINI.md .cursorrules .windsurfrules; do [ -f \"$file\" ] || continue; title=$(awk 'NF {{ gsub(/\\r/, \"\"); print; exit }}' \"$file\" 2>/dev/null | sed 's/^#* *//'); printf 'WS_AGENT_FILE=%s\\n' \"$file\"; printf 'WS_AGENT_TITLE=%s\\n' \"$title\"; printf 'WS_AGENT_PREVIEW_BEGIN\\n'; sed -n '1,80p' \"$file\" 2>/dev/null; printf '\\nWS_AGENT_PREVIEW_END\\n'; done",
+        shell_quote(path)
+    );
+    let output = run_server_command(server, &command)?;
+    if !output.status.success() {
+        return Ok(Vec::new());
+    }
+    Ok(parse_agent_context_output(&String::from_utf8_lossy(
+        &output.stdout,
+    )))
+}
+
+fn parse_agent_context_output(output: &str) -> Vec<AgentContextFile> {
+    let mut files = Vec::new();
+    let mut path = None;
+    let mut title = String::new();
+    let mut preview = Vec::new();
+    let mut in_preview = false;
+
+    for line in output.lines() {
+        if let Some(value) = line.strip_prefix("WS_AGENT_FILE=") {
+            path = Some(value.to_string());
+            title.clear();
+            preview.clear();
+            in_preview = false;
+        } else if let Some(value) = line.strip_prefix("WS_AGENT_TITLE=") {
+            title = value.to_string();
+        } else if line == "WS_AGENT_PREVIEW_BEGIN" {
+            in_preview = true;
+            preview.clear();
+        } else if line == "WS_AGENT_PREVIEW_END" {
+            if let Some(path) = path.take() {
+                files.push(AgentContextFile {
+                    path,
+                    title: title.clone(),
+                    preview: preview.join("\n").trim().to_string(),
+                });
+            }
+            title.clear();
+            preview.clear();
+            in_preview = false;
+        } else if in_preview {
+            preview.push(line.to_string());
+        }
+    }
+
+    files
 }
 
 fn scan_git(server: &ServerConfig, path: &str) -> Result<Option<GitInfo>> {
@@ -308,7 +362,10 @@ pub fn attach_ssh_command(ssh: &str) -> String {
 mod tests {
     use crate::model::Pane;
 
-    use super::{attach_ssh_command, group_panes, normalize_git_remote, tmux_attach_command};
+    use super::{
+        attach_ssh_command, group_panes, normalize_git_remote, parse_agent_context_output,
+        tmux_attach_command,
+    };
 
     #[test]
     fn adds_tty_to_plain_ssh_attach_command() {
@@ -378,5 +435,17 @@ mod tests {
             normalize_git_remote("https://github.com/user/repo.git").as_deref(),
             Some("https://github.com/user/repo")
         );
+    }
+
+    #[test]
+    fn parses_agent_context_output() {
+        let files = parse_agent_context_output(
+            "WS_AGENT_FILE=AGENTS.md\nWS_AGENT_TITLE=Agent Guide\nWS_AGENT_PREVIEW_BEGIN\n# Agent Guide\nRun tests.\nWS_AGENT_PREVIEW_END\n",
+        );
+
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, "AGENTS.md");
+        assert_eq!(files[0].title, "Agent Guide");
+        assert_eq!(files[0].preview, "# Agent Guide\nRun tests.");
     }
 }

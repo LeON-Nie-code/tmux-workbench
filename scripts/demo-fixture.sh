@@ -44,7 +44,8 @@ create table workspaces (
   git_remote text,
   git_dirty integer,
   git_ahead integer,
-  git_behind integer
+  git_behind integer,
+  agent_context text not null default '[]'
 );
 
 create table panes (
@@ -58,11 +59,11 @@ create table panes (
 );
 
 insert into workspaces values
-('prod/api','api','api','prod','api','/srv/api','codex','Backend uses uv. Check worker before deploy.','active','seen','backend,prod','2026-07-01T10:55:00Z','2026-07-01T10:58:00Z',8,'main','d43063f','https://github.com/example/api',1,1,0),
-('prod/worker','worker',null,'prod','worker','/srv/worker','bash','Runs queue consumers and btop.','active','seen','backend,prod','2026-07-01T09:40:00Z','2026-07-01T09:55:00Z',4,'release','a81f222','https://github.com/example/worker',1,0,0),
-('research/neuroplay','neuroplay','neuro','research','neuroplay','/data/code/neuroplay','claude','Frontend in ./web. Dataset notes in docs/.','active','seen','research,frontend','2026-07-01T08:25:00Z','2026-07-01T09:10:00Z',11,'main','91c2f04','https://github.com/example/neuroplay',0,0,0),
-('local/tmux-workbench','tmux-workbench','tmux-workbench','local','tmux-workbench','~/code/tmux-workbench','zsh','Open source polish and release prep.','active','seen','oss,rust','2026-07-01T10:45:00Z','2026-07-01T10:50:00Z',15,'master','acade4e','https://github.com/LeON-Nie-code/tmux-workbench',1,0,0),
-('prod/old-dashboard','old-dashboard',null,'prod','old-dashboard','/srv/dashboard','node','Archived after migration to admin-v2.','archived','missing','frontend,legacy','2026-06-28T12:00:00Z',null,1,'legacy','0ac91be','https://github.com/example/dashboard',0,0,3);
+('prod/api','api','api','prod','api','/srv/api','codex','Backend uses uv. Check worker before deploy.','active','seen','backend,prod','2026-07-01T10:55:00Z','2026-07-01T10:58:00Z',8,'main','d43063f','https://github.com/example/api',1,1,0,'[{"path":"AGENTS.md","title":"API agent guide","preview":"# API agent guide\nRun cargo test before deploy.\nKeep migration notes in docs/."}]'),
+('prod/worker','worker',null,'prod','worker','/srv/worker','bash','Runs queue consumers and btop.','active','seen','backend,prod','2026-07-01T09:40:00Z','2026-07-01T09:55:00Z',4,'release','a81f222','https://github.com/example/worker',1,0,0,'[]'),
+('research/neuroplay','neuroplay','neuro','research','neuroplay','/data/code/neuroplay','claude','Frontend in ./web. Dataset notes in docs/.','active','seen','research,frontend','2026-07-01T08:25:00Z','2026-07-01T09:10:00Z',11,'main','91c2f04','https://github.com/example/neuroplay',0,0,0,'[{"path":"CLAUDE.md","title":"NeuroPlay instructions","preview":"# NeuroPlay instructions\nFrontend lives in ./web.\nUse pnpm for UI changes."}]'),
+('local/tmux-workbench','tmux-workbench','tmux-workbench','local','tmux-workbench','~/code/tmux-workbench','zsh','Open source polish and release prep.','active','seen','oss,rust','2026-07-01T10:45:00Z','2026-07-01T10:50:00Z',15,'master','acade4e','https://github.com/LeON-Nie-code/tmux-workbench',1,0,0,'[]'),
+('prod/old-dashboard','old-dashboard',null,'prod','old-dashboard','/srv/dashboard','node','Archived after migration to admin-v2.','archived','missing','frontend,legacy','2026-06-28T12:00:00Z',null,1,'legacy','0ac91be','https://github.com/example/dashboard',0,0,3,'[]');
 
 insert into panes values
 ('prod/api','0:api',0,1,'codex','/srv/api','api agent'),
@@ -75,5 +76,5 @@ insert into panes values
 ('local/tmux-workbench','1:tests',0,0,'cargo','~/code/tmux-workbench','tests'),
 ('prod/old-dashboard','0:legacy',0,0,'node','/srv/dashboard','legacy');
 
-pragma user_version = 1;
+pragma user_version = 2;
 SQL
