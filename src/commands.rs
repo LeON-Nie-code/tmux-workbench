@@ -241,6 +241,11 @@ pub fn open_config() -> Result<()> {
 }
 
 pub fn attach(name: &str) -> Result<()> {
+    let command = attach_command_for_workspace(name)?;
+    run_attach_command(&command)
+}
+
+pub fn attach_command_for_workspace(name: &str) -> Result<String> {
     let conn = open_db()?;
     migrate(&conn)?;
     let ws =
@@ -263,7 +268,10 @@ pub fn attach(name: &str) -> Result<()> {
 
     record_attach(&conn, &ws.id)?;
     let remote = tmux_attach_command(&ws.session, server.term.as_deref());
-    let command = server_command_for_tty(server, &remote);
+    Ok(server_command_for_tty(server, &remote))
+}
+
+pub fn run_attach_command(command: &str) -> Result<()> {
     Command::new("sh")
         .arg("-lc")
         .arg(command)

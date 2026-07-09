@@ -12,17 +12,19 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
-    Terminal,
+    Frame, Terminal,
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Wrap},
+    widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
 };
 use rusqlite::params;
 
 use crate::{
-    commands::{ScanSummary, attach, refresh_index_report, scan},
+    commands::{
+        ScanSummary, attach_command_for_workspace, refresh_index_report, run_attach_command, scan,
+    },
     db::{load_workspaces, migrate, open_db},
     model::Workspace,
     util::{edit_note, truncate},
@@ -31,11 +33,19 @@ use crate::{
 const AUTO_REFRESH_INTERVAL: Duration = Duration::from_secs(30);
 
 type RefreshResult = std::result::Result<RefreshPayload, String>;
+type AttachResult = std::result::Result<String, String>;
 
 #[derive(Debug)]
 struct RefreshPayload {
     workspaces: Vec<Workspace>,
     summary: ScanSummary,
+}
+
+#[derive(Debug)]
+struct AttachState {
+    workspace_id: String,
+    started_at: Instant,
+    rx: Receiver<AttachResult>,
 }
 
 pub fn run_tui() -> Result<()> {
@@ -111,6 +121,7 @@ fn draw_tui(
     let mut server_filter: Option<String> = None;
     let mut last_auto_refresh = Instant::now();
     let mut auto_refresh_in_flight = false;
+    let mut attach_state: Option<AttachState> = None;
     let mut scan_status = String::from("Scan: idle");
     let (refresh_tx, refresh_rx) = mpsc::channel();
 
@@ -128,7 +139,29 @@ fn draw_tui(
             server_filter.as_deref(),
         );
 
-        if last_auto_refresh.elapsed() >= AUTO_REFRESH_INTERVAL && !auto_refresh_in_flight {
+        if let Some(state) = &attach_state {
+            match state.rx.try_recv() {
+                Ok(Ok(command)) => {
+                    disable_raw_mode()?;
+                    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+                    return run_attach_command(&command);
+                }
+                Ok(Err(err)) => {
+                    scan_status = format!("Attach failed: {err}");
+                    attach_state = None;
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    scan_status = "Attach failed: worker disconnected".to_string();
+                    attach_state = None;
+                }
+                Err(mpsc::TryRecvError::Empty) => {}
+            }
+        }
+
+        if attach_state.is_none()
+            && last_auto_refresh.elapsed() >= AUTO_REFRESH_INTERVAL
+            && !auto_refresh_in_flight
+        {
             spawn_auto_refresh(refresh_tx.clone());
             auto_refresh_in_flight = true;
             scan_status = "Scan: refreshing...".to_string();
@@ -217,10 +250,17 @@ fn draw_tui(
             frame.render_widget(detail, chunks[1]);
 
             frame.render_widget(footer(mode, view), shell[2]);
+
+            if let Some(state) = &attach_state {
+                render_attach_loading(frame, frame.area(), state);
+            }
         })?;
 
         if event::poll(Duration::from_millis(200))? {
             if let Event::Key(key) = event::read()? {
+                if attach_state.is_some() {
+                    continue;
+                }
                 match mode {
                     InputMode::Normal => match key.code {
                         KeyCode::Char('q') | KeyCode::Esc => break,
@@ -333,9 +373,7 @@ fn draw_tui(
                         KeyCode::Enter => {
                             if let Some(selected) = state.selected() {
                                 let ws = &workspaces[filtered[selected]];
-                                disable_raw_mode()?;
-                                execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-                                return attach(&ws.id);
+                                attach_state = Some(spawn_attach(ws.id.clone()));
                             }
                         }
                         _ => {}
@@ -438,6 +476,92 @@ fn app_header(
         ]),
     ])
     .block(Block::default().style(Style::default().bg(Color::Rgb(15, 23, 42))))
+}
+
+fn spawn_attach(workspace_id: String) -> AttachState {
+    let (tx, rx) = mpsc::channel();
+    let worker_workspace_id = workspace_id.clone();
+    thread::spawn(move || {
+        let result =
+            attach_command_for_workspace(&worker_workspace_id).map_err(|err| format!("{err:#}"));
+        let _ = tx.send(result);
+    });
+    AttachState {
+        workspace_id,
+        started_at: Instant::now(),
+        rx,
+    }
+}
+
+fn render_attach_loading(frame: &mut Frame<'_>, area: Rect, state: &AttachState) {
+    let popup = centered_rect(56, 9, area);
+    frame.render_widget(Clear, popup);
+    frame.render_widget(panel_block("Attaching"), popup);
+
+    let spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    let frame_index = (state.started_at.elapsed().as_millis() / 120) as usize % spinner.len();
+    let elapsed = state.started_at.elapsed().as_secs_f32();
+    let inner = inner(popup);
+    let lines = vec![
+        Line::from(vec![
+            Span::styled(
+                spinner[frame_index],
+                Style::default()
+                    .fg(Color::Rgb(94, 234, 212))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                "Preparing tmux attach",
+                Style::default()
+                    .fg(Color::Rgb(226, 232, 240))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "workspace  ",
+                Style::default().fg(Color::Rgb(100, 116, 139)),
+            ),
+            Span::styled(
+                state.workspace_id.clone(),
+                Style::default().fg(Color::Rgb(226, 232, 240)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "status     ",
+                Style::default().fg(Color::Rgb(100, 116, 139)),
+            ),
+            Span::styled(
+                "checking session and opening shell",
+                Style::default().fg(Color::Rgb(148, 163, 184)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "elapsed    ",
+                Style::default().fg(Color::Rgb(100, 116, 139)),
+            ),
+            Span::styled(
+                format!("{elapsed:.1}s"),
+                Style::default().fg(Color::Rgb(134, 239, 172)),
+            ),
+        ]),
+    ];
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
+    let width = width.min(area.width);
+    let height = height.min(area.height);
+    Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    }
 }
 
 fn footer(mode: InputMode, view: WorkspaceView) -> Paragraph<'static> {
