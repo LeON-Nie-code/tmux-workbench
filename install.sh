@@ -2,7 +2,7 @@
 set -eu
 
 REPO="LeON-Nie-code/tmux-workbench"
-VERSION="${TMUX_WORKBENCH_VERSION:-v0.1.0}"
+VERSION="${TMUX_WORKBENCH_VERSION:-v0.1.1}"
 INSTALL_DIR="${TMUX_WORKBENCH_INSTALL_DIR:-$HOME/.local/bin}"
 
 os="$(uname -s)"

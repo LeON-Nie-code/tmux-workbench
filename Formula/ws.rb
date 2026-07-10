@@ -1,8 +1,8 @@
 class Ws < Formula
-  desc "Terminal workspace memory manager for local and remote tmux sessions"
+  desc "Workspace memory for SSH, tmux, and AI coding agents"
   homepage "https://github.com/LeON-Nie-code/tmux-workbench"
   url "https://github.com/LeON-Nie-code/tmux-workbench.git",
-      tag: "v0.1.0"
+      tag: "v0.1.1"
   license "MIT"
   head "https://github.com/LeON-Nie-code/tmux-workbench.git", branch: "master"
 

@@ -1,9 +1,9 @@
 [package]
 name = "ws"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.85"
-description = "Tmux Workbench: a terminal workspace memory manager for local and remote tmux sessions"
+description = "Tmux Workbench: workspace memory for SSH, tmux, and AI coding agents"
 license = "MIT"
 repository = "https://github.com/LeON-Nie-code/tmux-workbench"
 homepage = "https://github.com/LeON-Nie-code/tmux-workbench"

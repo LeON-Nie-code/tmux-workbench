@@ -7,12 +7,11 @@
 
 English | [简体中文](README.zh-CN.md)
 
-Tmux Workbench is a terminal workspace memory manager for local and remote tmux
-sessions.
+Tmux Workbench is a workspace memory manager for developers running SSH, tmux,
+and AI coding agents across multiple machines.
 
-It indexes tmux sessions across your machine and SSH servers, remembers the
-project context around them, and gives you one fast CLI/TUI entry point to get
-back to work.
+It indexes local and remote tmux sessions, remembers the project context around
+them, and gives you one fast CLI/TUI entry point to get back to work.
 
 ```bash
 ws
@@ -25,8 +24,8 @@ ws
 ## Why
 
 SSH plus tmux is resilient, but it does not remember enough when your work is
-spread across many machines and many projects. Tmux Workbench adds a local
-memory layer above tmux:
+spread across many machines, many projects, and long-running coding-agent
+sessions. Tmux Workbench adds a local memory layer above tmux:
 
 - server and connection information
 - tmux session and pane snapshot
@@ -37,6 +36,19 @@ memory layer above tmux:
 
 It does not replace tmux. It makes tmux workspaces easier to find, inspect, and
 resume.
+
+## AI Agent Workflows
+
+Many workspaces now have a long-running coding agent pane such as Claude Code,
+Codex, Gemini, or Aider. Tmux Workbench treats those panes as first-class
+workspace context:
+
+- prefer agent panes when choosing the workspace root
+- index agent instruction files like `CLAUDE.md`, `AGENTS.md`, and
+  `.cursorrules`
+- show agent docs in the TUI detail view
+- expose indexed context with `ws agent <workspace>`
+- keep attach loading visible while remote tmux checks run
 
 ## Features
 
@@ -102,7 +114,7 @@ place it somewhere in your `PATH`.
 Example for macOS Apple Silicon:
 
 ```bash
-curl -L -o ws https://github.com/LeON-Nie-code/tmux-workbench/releases/download/v0.1.0/ws-macos-aarch64
+curl -L -o ws https://github.com/LeON-Nie-code/tmux-workbench/releases/download/v0.1.1/ws-macos-aarch64
 chmod +x ws
 mkdir -p ~/.local/bin
 mv ws ~/.local/bin/ws

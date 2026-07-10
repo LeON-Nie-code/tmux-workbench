@@ -2,10 +2,11 @@
 
 [English](README.md) | 简体中文
 
-Tmux Workbench 是一个面向本机和远程 tmux session 的终端工作区记忆工具。
+Tmux Workbench 是一个面向 SSH、tmux 和 AI coding agent 工作流的 workspace
+记忆管理器。
 
-它会索引你在不同机器和 SSH 服务器上的 tmux workspace，记录项目路径、pane、
-git 状态、AI agent 初始化文档、备注、标签和进入历史，让你用一个简短命令回到完整工作现场：
+它会索引本机和远程 SSH 服务器上的 tmux workspace，记录项目路径、pane、git
+状态、AI agent 初始化文档、备注、标签和进入历史，让你用一个简短命令回到完整工作现场：
 
 ```bash
 ws
@@ -28,6 +29,17 @@ SSH + tmux 很稳定，但当项目和服务器变多以后，你需要记住太
 - 上次给这个 workspace 留了什么备注
 
 Tmux Workbench 不替代 tmux。它是在 tmux 之上增加一层本地“项目记忆”。
+
+## AI Agent 工作流
+
+现在很多 workspace 里都会长期跑 Claude Code、Codex、Gemini 或 Aider 这类
+coding agent。Tmux Workbench 会把这些 pane 当成重要的 workspace context：
+
+- 优先使用 agent pane 的路径作为 workspace root
+- 索引 `CLAUDE.md`、`AGENTS.md`、`.cursorrules` 这类 agent 初始化文档
+- 在 TUI detail 里展示 agent docs
+- 用 `ws agent <workspace>` 查看已索引的 agent context
+- 远程 attach 较慢时显示 loading 状态，避免误以为卡住
 
 ## 功能
 
@@ -91,7 +103,7 @@ cargo install --path .
 macOS Apple Silicon 示例：
 
 ```bash
-curl -L -o ws https://github.com/LeON-Nie-code/tmux-workbench/releases/download/v0.1.0/ws-macos-aarch64
+curl -L -o ws https://github.com/LeON-Nie-code/tmux-workbench/releases/download/v0.1.1/ws-macos-aarch64
 chmod +x ws
 mkdir -p ~/.local/bin
 mv ws ~/.local/bin/ws
