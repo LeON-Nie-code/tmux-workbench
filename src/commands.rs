@@ -1,4 +1,5 @@
 use std::{
+    io::{self, Write},
     process::{Command, Stdio},
     thread,
 };
@@ -242,7 +243,7 @@ pub fn open_config() -> Result<()> {
 
 pub fn attach(name: &str) -> Result<()> {
     let command = attach_command_for_workspace(name)?;
-    run_attach_command(&command)
+    run_attach_command(name, &command)
 }
 
 pub fn attach_command_for_workspace(name: &str) -> Result<String> {
@@ -271,7 +272,10 @@ pub fn attach_command_for_workspace(name: &str) -> Result<String> {
     Ok(server_command_for_tty(server, &remote))
 }
 
-pub fn run_attach_command(command: &str) -> Result<()> {
+pub fn run_attach_command(workspace: &str, command: &str) -> Result<()> {
+    println!("Connecting to {workspace}...");
+    println!("If this takes too long, check SSH or run `ws doctor` in another terminal.");
+    io::stdout().flush().ok();
     Command::new("sh")
         .arg("-lc")
         .arg(command)

@@ -142,9 +142,10 @@ fn draw_tui(
         if let Some(state) = &attach_state {
             match state.rx.try_recv() {
                 Ok(Ok(command)) => {
+                    let workspace_id = state.workspace_id.clone();
                     disable_raw_mode()?;
                     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-                    return run_attach_command(&command);
+                    return run_attach_command(&workspace_id, &command);
                 }
                 Ok(Err(err)) => {
                     scan_status = format!("Attach failed: {err}");
