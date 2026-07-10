@@ -18,7 +18,8 @@ use tui::run_tui;
 
 #[derive(Parser)]
 #[command(name = "ws")]
-#[command(about = "Tmux Workbench: workspace memory for local and remote tmux sessions")]
+#[command(version)]
+#[command(about = "Tmux Workbench: workspace memory for SSH, tmux, and AI coding agents")]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,

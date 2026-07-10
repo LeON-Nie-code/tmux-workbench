@@ -71,16 +71,40 @@ Requirements:
 - git
 - ssh for remote servers
 
-### Install Script
+### Recommended
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LeON-Nie-code/tmux-workbench/master/install.sh | bash
 ```
 
-The script installs `ws` into `~/.local/bin` by default. Set
-`TMUX_WORKBENCH_INSTALL_DIR` to override the install directory.
+The installer downloads the right binary for your platform, installs `ws` into
+a writable directory, verifies the install, and prints a PATH fix if needed.
 
-### Homebrew
+To choose a custom install directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LeON-Nie-code/tmux-workbench/master/install.sh \
+  | TMUX_WORKBENCH_INSTALL_DIR="$HOME/bin" bash
+```
+
+### Other Methods
+
+Cargo:
+
+```bash
+cargo install --git https://github.com/LeON-Nie-code/tmux-workbench ws
+```
+
+Manual download:
+
+```bash
+curl -L -o ws https://github.com/LeON-Nie-code/tmux-workbench/releases/download/v0.1.2/ws-macos-aarch64
+chmod +x ws
+mkdir -p ~/.local/bin
+mv ws ~/.local/bin/ws
+```
+
+Homebrew:
 
 Homebrew support is available from this repository tap. Homebrew 6 requires
 trusting custom taps before loading their formulae:
@@ -89,35 +113,6 @@ trusting custom taps before loading their formulae:
 brew tap LeON-Nie-code/tmux-workbench https://github.com/LeON-Nie-code/tmux-workbench
 brew trust LeON-Nie-code/tmux-workbench
 brew install LeON-Nie-code/tmux-workbench/ws
-```
-
-The install script above is the recommended path if you only want the binary.
-
-### Cargo
-
-```bash
-cargo install --git https://github.com/LeON-Nie-code/tmux-workbench ws
-```
-
-From a local checkout:
-
-```bash
-cargo install --path .
-```
-
-### Manual Download
-
-Download a binary from the
-[Releases](https://github.com/LeON-Nie-code/tmux-workbench/releases) page and
-place it somewhere in your `PATH`.
-
-Example for macOS Apple Silicon:
-
-```bash
-curl -L -o ws https://github.com/LeON-Nie-code/tmux-workbench/releases/download/v0.1.1/ws-macos-aarch64
-chmod +x ws
-mkdir -p ~/.local/bin
-mv ws ~/.local/bin/ws
 ```
 
 ## Quick Start

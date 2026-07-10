@@ -7,6 +7,13 @@ configuration format settle.
 
 ## Unreleased
 
+## v0.1.2 - 2026-07-10
+
+- Improve the install script with platform detection, clearer progress output,
+  safer install directory selection, install verification, and PATH guidance.
+- Add `ws --version`.
+- Simplify README installation docs around the recommended install script.
+
 ## v0.1.1 - 2026-07-10
 
 - Add AI agent context indexing for files such as `AGENTS.md`, `CLAUDE.md`,

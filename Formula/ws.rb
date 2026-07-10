@@ -2,7 +2,7 @@ class Ws < Formula
   desc "Workspace memory for SSH, tmux, and AI coding agents"
   homepage "https://github.com/LeON-Nie-code/tmux-workbench"
   url "https://github.com/LeON-Nie-code/tmux-workbench.git",
-      tag: "v0.1.1"
+      tag: "v0.1.2"
   license "MIT"
   head "https://github.com/LeON-Nie-code/tmux-workbench.git", branch: "master"
 

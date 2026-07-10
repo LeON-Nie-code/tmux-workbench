@@ -62,15 +62,40 @@ coding agent。Tmux Workbench 会把这些 pane 当成重要的 workspace contex
 - git
 - 如果使用远程服务器，需要 ssh
 
-### 安装脚本
+### 推荐安装
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LeON-Nie-code/tmux-workbench/master/install.sh | bash
 ```
 
-默认安装到 `~/.local/bin/ws`。可以通过 `TMUX_WORKBENCH_INSTALL_DIR` 指定目录。
+安装脚本会自动选择当前平台的二进制文件，安装到一个可写目录，验证安装结果，
+并在 `PATH` 未配置时给出修复命令。
 
-### Homebrew
+如果想指定安装目录：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LeON-Nie-code/tmux-workbench/master/install.sh \
+  | TMUX_WORKBENCH_INSTALL_DIR="$HOME/bin" bash
+```
+
+### 其他安装方式
+
+Cargo：
+
+```bash
+cargo install --git https://github.com/LeON-Nie-code/tmux-workbench ws
+```
+
+手动下载：
+
+```bash
+curl -L -o ws https://github.com/LeON-Nie-code/tmux-workbench/releases/download/v0.1.2/ws-macos-aarch64
+chmod +x ws
+mkdir -p ~/.local/bin
+mv ws ~/.local/bin/ws
+```
+
+Homebrew：
 
 可以从当前仓库作为 Homebrew tap 安装。Homebrew 6 对自定义 tap 需要先显式
 trust：
@@ -79,34 +104,6 @@ trust：
 brew tap LeON-Nie-code/tmux-workbench https://github.com/LeON-Nie-code/tmux-workbench
 brew trust LeON-Nie-code/tmux-workbench
 brew install LeON-Nie-code/tmux-workbench/ws
-```
-
-如果只是想安装二进制，更推荐使用上面的安装脚本。
-
-### Cargo
-
-```bash
-cargo install --git https://github.com/LeON-Nie-code/tmux-workbench ws
-```
-
-本地 checkout：
-
-```bash
-cargo install --path .
-```
-
-### 手动下载
-
-从 [Releases](https://github.com/LeON-Nie-code/tmux-workbench/releases)
-下载对应平台的 `ws`，放到 `PATH` 中。
-
-macOS Apple Silicon 示例：
-
-```bash
-curl -L -o ws https://github.com/LeON-Nie-code/tmux-workbench/releases/download/v0.1.1/ws-macos-aarch64
-chmod +x ws
-mkdir -p ~/.local/bin
-mv ws ~/.local/bin/ws
 ```
 
 ## 快速开始
