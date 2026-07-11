@@ -173,9 +173,9 @@ fn group_panes(server: &str, rows: Vec<(String, Pane)>) -> Vec<Workspace> {
             let active = panes.iter().find(|pane| pane.active).unwrap_or(&panes[0]);
             let agent_pane = panes
                 .iter()
-                .find(|pane| pane.command == "codex" || pane.command == "claude")
+                .find(|pane| is_agent_command(&pane.command))
                 .unwrap_or(active);
-            let agent = agent_pane.command.clone();
+            let agent = normalize_agent_command(&agent_pane.command);
             Some(Workspace {
                 id: format!("{server}/{}", session),
                 name: session.clone(),
@@ -197,6 +197,29 @@ fn group_panes(server: &str, rows: Vec<(String, Pane)>) -> Vec<Workspace> {
             })
         })
         .collect()
+}
+
+fn is_agent_command(command: &str) -> bool {
+    matches!(
+        normalize_agent_command(command).as_str(),
+        "codex" | "claude" | "gemini" | "aider"
+    )
+}
+
+fn normalize_agent_command(command: &str) -> String {
+    if command.starts_with("codex") {
+        return "codex".to_string();
+    }
+    if command.starts_with("claude") {
+        return "claude".to_string();
+    }
+    if command.starts_with("gemini") {
+        return "gemini".to_string();
+    }
+    if command.starts_with("aider") {
+        return "aider".to_string();
+    }
+    command.to_string()
 }
 
 fn scan_agent_context(server: &ServerConfig, path: &str) -> Result<Vec<AgentContextFile>> {
@@ -363,8 +386,8 @@ mod tests {
     use crate::model::Pane;
 
     use super::{
-        attach_ssh_command, group_panes, normalize_git_remote, parse_agent_context_output,
-        tmux_attach_command,
+        attach_ssh_command, group_panes, normalize_agent_command, normalize_git_remote,
+        parse_agent_context_output, tmux_attach_command,
     };
 
     #[test]
@@ -419,6 +442,43 @@ mod tests {
 
         assert_eq!(workspaces[0].root_path, "/repo");
         assert_eq!(workspaces[0].agent, "claude");
+    }
+
+    #[test]
+    fn normalizes_platform_specific_agent_command_names() {
+        assert_eq!(normalize_agent_command("codex-aarch64-a"), "codex");
+        assert_eq!(normalize_agent_command("claude-code"), "claude");
+
+        let workspaces = group_panes(
+            "local",
+            vec![
+                (
+                    "demo".to_string(),
+                    Pane {
+                        window: "0:shell".to_string(),
+                        pane: 0,
+                        active: true,
+                        command: "zsh".to_string(),
+                        path: "/tmp".to_string(),
+                        title: String::new(),
+                    },
+                ),
+                (
+                    "demo".to_string(),
+                    Pane {
+                        window: "1:codex".to_string(),
+                        pane: 0,
+                        active: false,
+                        command: "codex-aarch64-a".to_string(),
+                        path: "/repo".to_string(),
+                        title: String::new(),
+                    },
+                ),
+            ],
+        );
+
+        assert_eq!(workspaces[0].root_path, "/repo");
+        assert_eq!(workspaces[0].agent, "codex");
     }
 
     #[test]
