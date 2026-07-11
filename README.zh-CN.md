@@ -52,6 +52,8 @@ coding agent。Tmux Workbench 会把这些 pane 当成重要的 workspace contex
 - 记录 git branch、commit、dirty、ahead/behind 和 remote URL。
 - 检测 workspace root 下的 AI agent context 文件。
 - 后台刷新，不阻塞 TUI 操作。
+- 用 `ws doctor` 诊断本机和远程环境。
+- 用 `ws stats` 查看本地使用统计。
 - 所有状态都保存在本地 SQLite。
 
 ## 安装
@@ -80,10 +82,18 @@ curl -fsSL https://raw.githubusercontent.com/LeON-Nie-code/tmux-workbench/master
 
 ### 其他安装方式
 
-Cargo：
+从 GitHub 通过 Cargo 安装：
 
 ```bash
 cargo install --git https://github.com/LeON-Nie-code/tmux-workbench ws
+```
+
+从本地 checkout 安装：
+
+```bash
+git clone https://github.com/LeON-Nie-code/tmux-workbench.git
+cd tmux-workbench
+cargo install --path .
 ```
 
 手动下载：
@@ -104,6 +114,13 @@ trust：
 brew tap LeON-Nie-code/tmux-workbench https://github.com/LeON-Nie-code/tmux-workbench
 brew trust LeON-Nie-code/tmux-workbench
 brew install LeON-Nie-code/tmux-workbench/ws
+```
+
+验证安装：
+
+```bash
+ws --version
+ws doctor
 ```
 
 ## 快速开始
@@ -147,6 +164,7 @@ ws tags prod/api work backend
 ws status prod/api archived
 
 ws doctor
+ws stats
 ws open-config
 ```
 
@@ -212,6 +230,34 @@ servers:
 ~/.local/share/ws/workspaces.db
 ```
 
+## 第一次使用
+
+如果还没有索引任何 workspace，直接运行 `ws` 会显示最短的启动路径：
+
+```bash
+ws scan
+ws
+```
+
+如果要添加远程机器：
+
+```bash
+ws add-server prod --ssh "ssh prod"
+ws scan
+```
+
+如果连接或 tmux 检测有问题：
+
+```bash
+ws doctor
+```
+
+`ws doctor` 会检查本机命令、config/database 路径、SSH 连通性、远程 tmux
+是否可用，以及已索引 workspace 是否仍然存在。
+
+`ws stats` 只读取本地 SQLite，不上传任何 telemetry。它会汇总 workspace
+数量、attach 次数、missing session 和最常用 server。
+
 ## 项目状态
 
 Tmux Workbench 目前仍是 pre-1.0，优先服务真实的 SSH + tmux 日常开发流。
@@ -228,6 +274,7 @@ CLI 和数据库格式后续仍可能调整。
 - git snapshot
 - SQLite `user_version`
 - JSON 输出
+- `ws doctor` 和本地 usage stats
 
 计划中：
 
@@ -235,6 +282,9 @@ CLI 和数据库格式后续仍可能调整。
 - asciinema / GIF demo
 - 更多 release targets
 - 项目公开后准备独立 Homebrew tap
+
+更多内部设计见 [`docs/architecture.md`](docs/architecture.md)，和其他工具的区别见
+[`docs/comparison.md`](docs/comparison.md)。
 
 ## License
 

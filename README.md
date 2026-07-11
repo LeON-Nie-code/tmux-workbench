@@ -61,6 +61,8 @@ workspace context:
 - Capture git repository state for each workspace.
 - Detect AI agent context files in each workspace root.
 - Refresh in the background without blocking the TUI.
+- Diagnose local and remote setup with `ws doctor`.
+- Show local usage stats with `ws stats`.
 - Store state locally in SQLite.
 
 ## Installation
@@ -89,10 +91,18 @@ curl -fsSL https://raw.githubusercontent.com/LeON-Nie-code/tmux-workbench/master
 
 ### Other Methods
 
-Cargo:
+Cargo from GitHub:
 
 ```bash
 cargo install --git https://github.com/LeON-Nie-code/tmux-workbench ws
+```
+
+Cargo from a local checkout:
+
+```bash
+git clone https://github.com/LeON-Nie-code/tmux-workbench.git
+cd tmux-workbench
+cargo install --path .
 ```
 
 Manual download:
@@ -113,6 +123,13 @@ trusting custom taps before loading their formulae:
 brew tap LeON-Nie-code/tmux-workbench https://github.com/LeON-Nie-code/tmux-workbench
 brew trust LeON-Nie-code/tmux-workbench
 brew install LeON-Nie-code/tmux-workbench/ws
+```
+
+Verify:
+
+```bash
+ws --version
+ws doctor
 ```
 
 ## Quick Start
@@ -156,6 +173,7 @@ ws tags prod/api work backend
 ws status prod/api archived
 
 ws doctor
+ws stats
 ws open-config
 ```
 
@@ -224,6 +242,34 @@ Local index:
 ~/.local/share/ws/workspaces.db
 ```
 
+## First Run
+
+If `ws` has not indexed anything yet, it prints the shortest useful setup path:
+
+```bash
+ws scan
+ws
+```
+
+For remote machines:
+
+```bash
+ws add-server prod --ssh "ssh prod"
+ws scan
+```
+
+If something does not connect, run:
+
+```bash
+ws doctor
+```
+
+`ws doctor` checks local commands, config/database paths, SSH reachability, tmux
+availability, and whether indexed workspaces still exist on their tmux server.
+
+`ws stats` is local-only. It summarizes indexed workspaces, attach counts,
+missing sessions, and the most-used servers without sending any telemetry.
+
 ## Architecture
 
 Tmux Workbench reads tmux state, stores a local index, and uses tmux/ssh for
@@ -268,6 +314,9 @@ Planned:
 - dedicated Homebrew tap repository when the project is public
 
 See [ROADMAP.md](ROADMAP.md) for the current project direction.
+See [docs/architecture.md](docs/architecture.md) for internals and
+[docs/comparison.md](docs/comparison.md) for how Tmux Workbench differs from
+tmux-resurrect, tmux-continuum, Zellij, and plain SSH config.
 
 ## Contributing
 
