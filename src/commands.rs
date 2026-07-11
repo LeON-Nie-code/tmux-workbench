@@ -23,6 +23,12 @@ use crate::{
 pub fn scan() -> Result<()> {
     let summary = scan_index(true)?;
     println!("Indexed {} workspaces", summary.total);
+    if !summary.errors.is_empty() {
+        println!(
+            "{} server(s) failed. Run `ws doctor` for details.",
+            summary.errors.len()
+        );
+    }
     Ok(())
 }
 
@@ -273,10 +279,12 @@ pub fn attach_command_for_workspace(name: &str) -> Result<String> {
 }
 
 pub fn run_attach_command(workspace: &str, command: &str) -> Result<()> {
-    println!("Connecting to {workspace}...");
-    println!("If this takes too long, check SSH or run `ws doctor` in another terminal.");
+    print!("\x1b[0m\x1b[?25h");
+    println!("Opening {workspace}...");
+    println!("Connection prepared. Handing off to SSH/tmux now.");
+    println!("If the terminal stays here, check the server with `ws doctor`.");
     io::stdout().flush().ok();
-    Command::new("sh")
+    let status = Command::new("sh")
         .arg("-lc")
         .arg(command)
         .stdin(Stdio::inherit())
@@ -284,6 +292,9 @@ pub fn run_attach_command(workspace: &str, command: &str) -> Result<()> {
         .stderr(Stdio::inherit())
         .status()
         .context("failed to run attach command")?;
+    if !status.success() {
+        bail!("attach command exited with {status}");
+    }
     Ok(())
 }
 
@@ -360,18 +371,61 @@ pub fn doctor() -> Result<()> {
     migrate(&conn)?;
     let workspaces = load_workspaces(&conn)?;
 
+    println!("Tmux Workbench doctor");
+    println!();
+    println!("Local environment");
+    println!("  config: {}", config_path()?.display());
+    println!(
+        "  database: {}",
+        crate::config::data_path()?.join("workspaces.db").display()
+    );
+    println!(
+        "  tmux: {}",
+        if command_available("tmux") {
+            "ok"
+        } else {
+            "missing"
+        }
+    );
+    println!(
+        "  ssh: {}",
+        if command_available("ssh") {
+            "ok"
+        } else {
+            "missing"
+        }
+    );
+    println!(
+        "  git: {}",
+        if command_available("git") {
+            "ok"
+        } else {
+            "missing"
+        }
+    );
+    println!("  indexed workspaces: {}", workspaces.len());
+    println!();
+
+    if config.servers.is_empty() {
+        println!("No servers configured.");
+        println!("Add local tmux indexing with `ws add-server local --local`.");
+        println!("Add SSH indexing with `ws add-server prod --ssh \"ssh prod\"`.");
+        return Ok(());
+    }
+
+    println!("Servers");
     for server in &config.servers {
-        println!("server: {}", server.name);
+        println!("  {}", server.name);
         match remote_doctor(server) {
             Ok(report) => {
                 if server.local {
-                    println!("  connection: local");
+                    println!("    connection: local");
                 } else {
-                    println!("  ssh: ok");
+                    println!("    ssh: ok");
                 }
-                println!("  host: {}", report.hostname);
+                println!("    host: {}", report.hostname);
                 println!(
-                    "  tmux: {}",
+                    "    tmux: {}",
                     if report.tmux_available {
                         "ok"
                     } else {
@@ -383,21 +437,118 @@ pub fn doctor() -> Result<()> {
                     .filter(|workspace| workspace.server == server.name)
                     .collect();
                 server_workspaces.sort_by(|left, right| left.name.cmp(&right.name));
+                println!("    indexed workspaces: {}", server_workspaces.len());
                 for workspace in server_workspaces {
                     let status = if report.sessions.contains(&workspace.session) {
                         "ok"
                     } else {
                         "missing"
                     };
-                    println!("  {:<40} {}", workspace.id, status);
+                    println!("    {:<40} {}", workspace.id, status);
                 }
             }
             Err(err) => {
-                println!("  ssh: failed");
-                println!("  error: {err:#}");
+                if server.local {
+                    println!("    local check: failed");
+                } else {
+                    println!("    ssh: failed");
+                }
+                println!("    error: {err:#}");
+                println!(
+                    "    hint: verify the command shown by `ws servers`, then run it directly."
+                );
             }
         }
+        println!();
     }
+    Ok(())
+}
+
+fn command_available(name: &str) -> bool {
+    Command::new("sh")
+        .arg("-lc")
+        .arg(format!("command -v {}", shell_quote(name)))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+pub fn print_stats() -> Result<()> {
+    let conn = open_db()?;
+    migrate(&conn)?;
+    let mut workspaces = load_workspaces(&conn)?;
+    workspaces.sort_by(|left, right| {
+        right
+            .attach_count
+            .cmp(&left.attach_count)
+            .then_with(|| right.last_attached_at.cmp(&left.last_attached_at))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+
+    let total = workspaces.len();
+    let active = workspaces
+        .iter()
+        .filter(|workspace| workspace.status != "archived")
+        .count();
+    let archived = workspaces
+        .iter()
+        .filter(|workspace| workspace.status == "archived")
+        .count();
+    let missing = workspaces
+        .iter()
+        .filter(|workspace| workspace.presence != "seen")
+        .count();
+    let attaches: i64 = workspaces
+        .iter()
+        .map(|workspace| workspace.attach_count)
+        .sum();
+
+    println!("Workspace stats");
+    println!("  total:     {total}");
+    println!("  active:    {active}");
+    println!("  archived:  {archived}");
+    println!("  missing:   {missing}");
+    println!("  attaches:  {attaches}");
+    println!();
+
+    println!("Top workspaces");
+    for workspace in workspaces.iter().take(10) {
+        println!(
+            "  {:<42} {:>4} attach(es)  last: {}",
+            truncate(&workspace.id, 42),
+            workspace.attach_count,
+            workspace.last_attached_at.as_deref().unwrap_or("never")
+        );
+    }
+
+    let mut by_server = std::collections::BTreeMap::<&str, (usize, i64)>::new();
+    for workspace in &workspaces {
+        let entry = by_server.entry(&workspace.server).or_default();
+        entry.0 += 1;
+        entry.1 += workspace.attach_count;
+    }
+
+    println!();
+    println!("By server");
+    for (server, (count, attach_count)) in by_server {
+        println!(
+            "  {:<24} {:>4} workspace(s)  {:>4} attach(es)",
+            server, count, attach_count
+        );
+    }
+
+    let stale_count = workspaces
+        .iter()
+        .filter(|workspace| workspace.presence != "seen" && workspace.status != "archived")
+        .count();
+    if stale_count > 0 {
+        println!();
+        println!(
+            "Tip: {stale_count} active workspace(s) are missing on their tmux server. Use `ws` to archive them or `ws recreate <workspace>` to restore one."
+        );
+    }
+
     Ok(())
 }
 

@@ -11,7 +11,8 @@ mod util;
 
 use commands::{
     add_server_command, attach, doctor, list_agent_context, list_servers, list_workspaces,
-    open_config, recreate, remove_server_command, scan, set_alias, set_note, set_status, set_tags,
+    open_config, print_stats, recreate, remove_server_command, scan, set_alias, set_note,
+    set_status, set_tags,
 };
 use config::init_config;
 use tui::run_tui;
@@ -62,6 +63,7 @@ enum Commands {
         name: String,
     },
     Doctor,
+    Stats,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -105,6 +107,7 @@ fn main() -> Result<()> {
         Some(Commands::AddServer(args)) => add_server_command(&args),
         Some(Commands::RemoveServer { name }) => remove_server_command(&name),
         Some(Commands::Doctor) => doctor(),
+        Some(Commands::Stats) => print_stats(),
         None => run_tui(),
     }
 }

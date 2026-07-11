@@ -51,7 +51,18 @@ struct AttachState {
 pub fn run_tui() -> Result<()> {
     let workspaces = load_indexed_workspaces()?;
     if workspaces.is_empty() {
-        println!("No workspaces indexed yet. Run `ws init` and `ws scan` first.");
+        println!("No workspaces indexed yet.");
+        println!();
+        println!("Start with local tmux:");
+        println!("  ws scan");
+        println!("  ws");
+        println!();
+        println!("Add a remote SSH server:");
+        println!("  ws add-server prod --ssh \"ssh prod\"");
+        println!("  ws scan");
+        println!();
+        println!("Check your setup:");
+        println!("  ws doctor");
         return Ok(());
     }
 
@@ -839,10 +850,14 @@ fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
         Line::from(""),
         section_line("Runtime"),
         field_line("Agent", &ws.agent),
-        field_line("Agent docs", &agent_context_detail(ws)),
         field_line("Panes", &ws.panes.len().to_string()),
         field_line("Active", &active_command),
         field_line("Status", &workspace_state(ws)),
+        Line::from(""),
+        section_line("Agent Context"),
+    ];
+    lines.extend(agent_context_lines(ws));
+    lines.extend(vec![
         Line::from(""),
         section_line("Git"),
         field_line("State", &git_detail(ws)),
@@ -863,7 +878,7 @@ fn workspace_detail_lines(ws: &Workspace) -> Vec<Line<'static>> {
             Span::styled(format!("{:<10}", "CMD"), header_style()),
             Span::styled("PATH", header_style()),
         ]),
-    ];
+    ]);
     lines.extend(pane_lines);
     lines.push(Line::from(""));
     lines.push(section_line("Note"));
@@ -901,16 +916,41 @@ fn tags_detail(ws: &Workspace) -> String {
     }
 }
 
-fn agent_context_detail(ws: &Workspace) -> String {
+fn agent_context_lines(ws: &Workspace) -> Vec<Line<'static>> {
     if ws.agent_context.is_empty() {
-        "-".to_string()
-    } else {
-        ws.agent_context
-            .iter()
-            .map(|file| file.path.as_str())
-            .collect::<Vec<_>>()
-            .join(", ")
+        return vec![field_line("", "-")];
     }
+
+    let mut lines = Vec::new();
+    for file in &ws.agent_context {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("{:<15}", file.path),
+                Style::default()
+                    .fg(Color::Rgb(226, 232, 240))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                if file.title.trim().is_empty() {
+                    "agent instructions".to_string()
+                } else {
+                    file.title.trim().to_string()
+                },
+                Style::default().fg(Color::Rgb(125, 211, 252)),
+            ),
+        ]));
+        for preview_line in file.preview.lines().take(3) {
+            let trimmed = preview_line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            lines.push(Line::from(Span::styled(
+                format!("  {}", truncate(trimmed, 88)),
+                Style::default().fg(Color::Rgb(148, 163, 184)),
+            )));
+        }
+    }
+    lines
 }
 
 fn note_lines(note: &str) -> Vec<Line<'static>> {

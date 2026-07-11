@@ -16,36 +16,19 @@ pub fn init_config() -> Result<()> {
     }
 
     let config = Config {
-        servers: vec![
-            ServerConfig {
-                name: "local".to_string(),
-                ssh: String::new(),
-                term: Some("xterm-256color".to_string()),
-                local: true,
-            },
-            ServerConfig {
-                name: "cavelight-local-frp".to_string(),
-                ssh: "ssh cavelight-local-frp".to_string(),
-                term: Some("xterm-256color".to_string()),
-                local: false,
-            },
-            ServerConfig {
-                name: "AI-Teacher-Baidu".to_string(),
-                ssh: "ssh AI-Teacher-Baidu".to_string(),
-                term: Some("xterm-256color".to_string()),
-                local: false,
-            },
-            ServerConfig {
-                name: "gcloud-emflux".to_string(),
-                ssh: "ssh instance-20260624-045641.asia-southeast1-b.emflux".to_string(),
-                term: Some("xterm-256color".to_string()),
-                local: false,
-            },
-        ],
+        servers: vec![ServerConfig {
+            name: "local".to_string(),
+            ssh: String::new(),
+            term: Some("xterm-256color".to_string()),
+            local: true,
+        }],
     };
 
     fs::write(&path, serde_yaml::to_string(&config)?)?;
     println!("Created {}", path.display());
+    println!(
+        "Next: run `ws scan`, or add a remote server with `ws add-server prod --ssh \"ssh prod\"`."
+    );
     Ok(())
 }
 
