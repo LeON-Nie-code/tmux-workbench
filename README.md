@@ -177,6 +177,13 @@ ws stats
 ws open-config
 ```
 
+`ws recreate` rebuilds a missing session from its latest indexed snapshot:
+windows, panes, working directories, layouts, and detected foreground commands.
+Commands are prefilled in their panes but are not executed; press Enter when
+you are ready. It cannot checkpoint process memory, so recovering an earlier
+agent conversation still depends on the agent's own resume command. Run
+`ws scan` after changing a layout to keep the snapshot current.
+
 Remote server commands use your system `ssh`, so existing `~/.ssh/config`,
 keys, ProxyCommand, and generated cloud SSH hosts continue to work.
 
@@ -308,7 +315,6 @@ Implemented:
 
 Planned:
 
-- pane layout restore
 - asciinema or GIF demo
 - more release targets
 - dedicated Homebrew tap repository when the project is public

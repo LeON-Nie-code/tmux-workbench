@@ -16,7 +16,7 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(8);
 const COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 pub fn scan_server(server: &ServerConfig) -> Result<Vec<Workspace>> {
-    let format = "session=#{session_name}|window=#{window_index}:#{window_name}|pane=#{pane_index}|active=#{pane_active}|cmd=#{pane_current_command}|path=#{pane_current_path}|title=#{pane_title}";
+    let format = "session=#{session_name}|window=#{window_index}:#{window_name}|layout=#{window_layout}|pane=#{pane_index}|active=#{pane_active}|cmd=#{pane_current_command}|path=#{pane_current_path}|title=#{pane_title}";
     let command = format!("tmux list-panes -a -F {}", shell_quote(format));
     let output = run_server_command(server, &command).context("failed to run tmux scan")?;
 
@@ -118,6 +118,7 @@ fn parse_pane_line(line: &str) -> Result<(String, Pane)> {
     let mut session = String::new();
     let mut window = String::new();
     let mut pane = 0;
+    let mut layout = String::new();
     let mut active = false;
     let mut command = String::new();
     let mut path = String::new();
@@ -130,6 +131,7 @@ fn parse_pane_line(line: &str) -> Result<(String, Pane)> {
         match key {
             "session" => session = value.to_string(),
             "window" => window = value.to_string(),
+            "layout" => layout = value.to_string(),
             "pane" => pane = value.parse().unwrap_or(0),
             "active" => active = value == "1",
             "cmd" => command = value.to_string(),
@@ -147,6 +149,7 @@ fn parse_pane_line(line: &str) -> Result<(String, Pane)> {
         session,
         Pane {
             window,
+            layout,
             pane,
             active,
             command,
@@ -419,6 +422,7 @@ mod tests {
                     "demo".to_string(),
                     Pane {
                         window: "0:main".to_string(),
+                        layout: String::new(),
                         pane: 0,
                         active: false,
                         command: "claude".to_string(),
@@ -430,6 +434,7 @@ mod tests {
                     "demo".to_string(),
                     Pane {
                         window: "0:main".to_string(),
+                        layout: String::new(),
                         pane: 1,
                         active: true,
                         command: "bash".to_string(),
@@ -456,6 +461,7 @@ mod tests {
                     "demo".to_string(),
                     Pane {
                         window: "0:shell".to_string(),
+                        layout: String::new(),
                         pane: 0,
                         active: true,
                         command: "zsh".to_string(),
@@ -467,6 +473,7 @@ mod tests {
                     "demo".to_string(),
                     Pane {
                         window: "1:codex".to_string(),
+                        layout: String::new(),
                         pane: 0,
                         active: false,
                         command: "codex-aarch64-a".to_string(),

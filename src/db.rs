@@ -65,6 +65,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         create table if not exists panes (
           workspace_id text not null,
           window text not null,
+          layout text not null default '',
           pane integer not null,
           active integer not null,
           command text not null,
@@ -73,6 +74,12 @@ pub fn migrate(conn: &Connection) -> Result<()> {
           foreign key(workspace_id) references workspaces(id)
         );
         ",
+    )?;
+    add_column_if_missing(
+        conn,
+        "panes",
+        "layout",
+        "alter table panes add column layout text not null default ''",
     )?;
     add_column_if_missing(
         conn,
@@ -146,7 +153,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         "agent_context",
         "alter table workspaces add column agent_context text not null default '[]'",
     )?;
-    conn.pragma_update(None, "user_version", 2)?;
+    conn.pragma_update(None, "user_version", 3)?;
     Ok(())
 }
 
@@ -213,11 +220,12 @@ pub fn upsert_workspace(conn: &Connection, ws: &Workspace) -> Result<()> {
     conn.execute("delete from panes where workspace_id = ?1", params![ws.id])?;
     for pane in &ws.panes {
         conn.execute(
-            "insert into panes (workspace_id, window, pane, active, command, path, title)
-             values (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "insert into panes (workspace_id, window, layout, pane, active, command, path, title)
+             values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 ws.id,
                 pane.window,
+                pane.layout,
                 pane.pane,
                 pane.active as i64,
                 pane.command,
@@ -335,17 +343,18 @@ pub fn find_workspace(conn: &Connection, name: &str) -> Result<Option<Workspace>
 
 fn load_panes(conn: &Connection, workspace_id: &str) -> Result<Vec<Pane>> {
     let mut stmt = conn.prepare(
-        "select window, pane, active, command, path, title
+        "select window, layout, pane, active, command, path, title
          from panes where workspace_id = ?1 order by window, pane",
     )?;
     let rows = stmt.query_map(params![workspace_id], |row| {
         Ok(Pane {
             window: row.get(0)?,
-            pane: row.get(1)?,
-            active: row.get::<_, i64>(2)? == 1,
-            command: row.get(3)?,
-            path: row.get(4)?,
-            title: row.get(5)?,
+            layout: row.get(1)?,
+            pane: row.get(2)?,
+            active: row.get::<_, i64>(3)? == 1,
+            command: row.get(4)?,
+            path: row.get(5)?,
+            title: row.get(6)?,
         })
     })?;
     rows.collect::<rusqlite::Result<Vec<_>>>()
@@ -459,6 +468,7 @@ mod tests {
             agent: "bash".to_string(),
             panes: vec![Pane {
                 window: "0:bash".to_string(),
+                layout: "layout".to_string(),
                 pane: 0,
                 active: true,
                 command: "bash".to_string(),

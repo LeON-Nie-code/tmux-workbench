@@ -1240,6 +1240,7 @@ mod tests {
             agent: "codex".to_string(),
             panes: vec![Pane {
                 window: "0:codex".to_string(),
+                layout: String::new(),
                 pane: 0,
                 active: true,
                 command: "bash".to_string(),

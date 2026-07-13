@@ -55,6 +55,7 @@ pub struct GitInfo {
 #[derive(Debug, Clone, Serialize)]
 pub struct Pane {
     pub window: String,
+    pub layout: String,
     pub pane: i64,
     pub active: bool,
     pub command: String,

@@ -7,12 +7,12 @@ SSH plus tmux development.
 
 - Record stale/missing workspace transitions more clearly.
 - Improve TUI layout on small terminals.
+- Add agent-specific conversation resume strategies to snapshot restore.
 - Add an asciinema demo.
 - Add release binaries for Linux and macOS.
 
 ## Later
 
-- Restore pane layouts.
 - Support project-local notes such as `.tmux-workbench.md`.
 - Add richer query filters and saved views.
 - Consider a Homebrew tap once releases are stable.

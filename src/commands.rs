@@ -13,7 +13,7 @@ use crate::{
         find_workspace, load_workspaces, mark_server_missing, migrate, open_db, record_attach,
         set_alias_by_id, set_note_by_id, set_status_by_id, set_tags_by_id, upsert_workspace,
     },
-    model::ServerConfig,
+    model::{Pane, ServerConfig, Workspace},
     remote::{
         attach_ssh_command, remote_doctor, remote_session_exists, scan_server, tmux_attach_command,
     },
@@ -335,12 +335,39 @@ pub fn recreate(name: &str) -> Result<()> {
         .find(|s| s.name == ws.server)
         .with_context(|| format!("server not found in config: {}", ws.server))?;
 
-    let remote = format!(
-        "cd {} && TERM={} tmux new-session -A -s {}",
-        shell_quote(&ws.root_path),
-        shell_quote(server.term.as_deref().unwrap_or("xterm-256color")),
-        shell_quote(&ws.session)
-    );
+    if remote_session_exists(server, &ws.session)? {
+        println!(
+            "Workspace {} already exists; attaching without replacing it.",
+            ws.id
+        );
+    } else {
+        let restore = build_recreate_command(&ws, server.term.as_deref());
+        let command = server_command_for_tty(server, &restore);
+        let status = Command::new("sh")
+            .arg("-lc")
+            .arg(command)
+            .status()
+            .context("failed to restore workspace snapshot")?;
+        if !status.success() {
+            bail!("failed to restore workspace snapshot");
+        }
+        println!(
+            "Restored {} window(s) and {} pane(s) from the last scan.",
+            unique_windows(&ws.panes).len(),
+            ws.panes.len()
+        );
+        if ws
+            .panes
+            .iter()
+            .any(|pane| restorable_foreground_command(pane).is_some())
+        {
+            println!(
+                "Foreground commands were restored without running them; press Enter in each pane when ready."
+            );
+        }
+    }
+
+    let remote = tmux_attach_command(&ws.session, server.term.as_deref());
     let command = server_command_for_tty(server, &remote);
     Command::new("sh")
         .arg("-lc")
@@ -351,6 +378,110 @@ pub fn recreate(name: &str) -> Result<()> {
         .status()
         .context("failed to recreate workspace")?;
     Ok(())
+}
+
+fn build_recreate_command(ws: &Workspace, term: Option<&str>) -> String {
+    let windows = unique_windows(&ws.panes);
+    if windows.is_empty() {
+        return format!(
+            "TERM={} tmux new-session -d -s {} -c {}",
+            shell_quote(term.unwrap_or("xterm-256color")),
+            shell_quote(&ws.session),
+            shell_quote(&ws.root_path),
+        );
+    }
+
+    let session = shell_quote(&ws.session);
+    let mut commands = vec![format!(
+        "export TERM={}",
+        shell_quote(term.unwrap_or("xterm-256color"))
+    )];
+    for (window_position, window) in windows.iter().enumerate() {
+        let panes: Vec<&Pane> = ws
+            .panes
+            .iter()
+            .filter(|pane| &pane.window == window)
+            .collect();
+        let (_, window_name) = window.split_once(':').unwrap_or((window, window));
+        let first = panes[0];
+        if window_position == 0 {
+            commands.push(format!(
+                "tmux new-session -d -s {session} -n {} -c {}",
+                shell_quote(window_name),
+                shell_quote(&first.path),
+            ));
+        } else {
+            commands.push(format!(
+                "tmux new-window -d -t {session} -n {} -c {}",
+                shell_quote(window_name),
+                shell_quote(&first.path),
+            ));
+        }
+        for pane in panes.iter().skip(1) {
+            commands.push(format!(
+                "tmux split-window -d -t {} -c {}",
+                shell_quote(&format!("{}:{}", ws.session, window_name)),
+                shell_quote(&pane.path),
+            ));
+        }
+        if !first.layout.is_empty() {
+            commands.push(format!(
+                "tmux select-layout -t {} {} >/dev/null",
+                shell_quote(&format!("{}:{}", ws.session, window_name)),
+                shell_quote(&first.layout),
+            ));
+        }
+        for pane in &panes {
+            if let Some(command) = restorable_foreground_command(pane) {
+                commands.push(format!(
+                    "tmux send-keys -l -t {} {}",
+                    shell_quote(&format!("{}:{}.{}", ws.session, window_name, pane.pane)),
+                    shell_quote(command),
+                ));
+            }
+        }
+        if let Some(active) = panes.iter().find(|pane| pane.active) {
+            commands.push(format!(
+                "tmux select-pane -t {}",
+                shell_quote(&format!("{}:{}.{}", ws.session, window_name, active.pane)),
+            ));
+        }
+    }
+    commands.join(" && ")
+}
+
+fn unique_windows(panes: &[Pane]) -> Vec<String> {
+    let mut windows = Vec::new();
+    for pane in panes {
+        if !windows.contains(&pane.window) {
+            windows.push(pane.window.clone());
+        }
+    }
+    windows
+}
+
+fn restorable_foreground_command(pane: &Pane) -> Option<&str> {
+    if is_shell_process(&pane.command) {
+        None
+    } else {
+        Some(restorable_command_name(&pane.command))
+    }
+}
+
+fn restorable_command_name(command: &str) -> &str {
+    if command.starts_with("codex") {
+        "codex"
+    } else if command.starts_with("claude") {
+        "claude"
+    } else if command.starts_with("gemini") {
+        "gemini"
+    } else {
+        command
+    }
+}
+
+fn is_shell_process(command: &str) -> bool {
+    matches!(command, "sh" | "bash" | "zsh" | "fish" | "dash" | "ksh")
 }
 
 fn server_command_for_tty(server: &crate::model::ServerConfig, command: &str) -> String {
@@ -610,4 +741,73 @@ pub fn set_tags(name: &str, tags: &[String]) -> Result<()> {
         bail!("workspace not found: {name}");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recreate_command_restores_windows_panes_layouts_and_processes() {
+        let workspace = Workspace {
+            id: "local/demo".to_string(),
+            name: "demo".to_string(),
+            alias: None,
+            server: "local".to_string(),
+            session: "demo".to_string(),
+            root_path: "/repo".to_string(),
+            agent: "codex".to_string(),
+            panes: vec![
+                pane("0:code", 0, true, "zsh", "/repo", "layout-a"),
+                pane("0:code", 1, false, "codex", "/repo", "layout-a"),
+                pane("1:monitor", 0, true, "btop", "/tmp", "layout-b"),
+            ],
+            note: String::new(),
+            status: "active".to_string(),
+            presence: "missing".to_string(),
+            tags: Vec::new(),
+            last_seen: "now".to_string(),
+            last_attached_at: None,
+            attach_count: 0,
+            git: None,
+            agent_context: Vec::new(),
+        };
+
+        let command = build_recreate_command(&workspace, None);
+        assert!(command.contains("tmux new-session -d"));
+        assert!(command.contains("tmux new-window -d"));
+        assert!(command.contains("tmux split-window -d"));
+        assert!(command.contains("tmux select-layout"));
+        assert!(command.contains("tmux send-keys -l"));
+        assert!(command.contains("'codex'"));
+        assert!(command.contains("'btop'"));
+        assert!(!command.contains(" send-keys -l -t 'demo:code.0' 'zsh'"));
+        assert!(!command.contains(" send-keys -l -t 'demo:code.1' 'codex' Enter"));
+    }
+
+    #[test]
+    fn recreate_uses_portable_agent_command_names() {
+        let pane = pane("0:code", 0, true, "codex-aarch64-a", "/repo", "");
+        let command = restorable_foreground_command(&pane);
+        assert_eq!(command, Some("codex"));
+    }
+
+    fn pane(
+        window: &str,
+        index: i64,
+        active: bool,
+        command: &str,
+        path: &str,
+        layout: &str,
+    ) -> Pane {
+        Pane {
+            window: window.to_string(),
+            layout: layout.to_string(),
+            pane: index,
+            active,
+            command: command.to_string(),
+            path: path.to_string(),
+            title: String::new(),
+        }
+    }
 }
